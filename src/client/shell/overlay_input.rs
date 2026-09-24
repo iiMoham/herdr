@@ -988,20 +988,28 @@ impl ClientShellState {
     }
 
     pub(super) fn request_tab_close(&mut self, tab_id: String, outcome: &mut ClientShellInput) {
-        let workspace_id = self.snapshot.as_deref().and_then(|snapshot| {
+        let close_scope = self.snapshot.as_deref().and_then(|snapshot| {
             let target = snapshot.tabs.iter().find(|tab| tab.tab_id == tab_id)?;
-            (self.config.confirm_close
-                && !snapshot
-                    .tabs
-                    .iter()
-                    .any(|tab| tab.workspace_id == target.workspace_id && tab.tab_id != tab_id))
-            .then(|| target.workspace_id.clone())
+            let has_sibling_tab = snapshot
+                .tabs
+                .iter()
+                .any(|tab| tab.workspace_id == target.workspace_id && tab.tab_id != tab_id);
+            Some((target.workspace_id.clone(), has_sibling_tab))
         });
-        if let Some(workspace_id) = workspace_id {
-            if self.open_close_confirmation(workspace_id, Some(tab_id.clone())) {
-                outcome.repaint = true;
-                return;
+        // Closing the last tab closes its workspace, so only `confirm_close` governs it;
+        // `confirm_close_tab` never adds a second prompt.
+        let confirming = match close_scope {
+            Some((workspace_id, false)) if self.config.confirm_close => {
+                self.open_close_confirmation(workspace_id, Some(tab_id.clone()))
             }
+            Some((workspace_id, true)) if self.config.confirm_close_tab => {
+                self.open_tab_close_confirmation(workspace_id, tab_id.clone())
+            }
+            Some(_) | None => false,
+        };
+        if confirming {
+            outcome.repaint = true;
+            return;
         }
         self.push_endpoint_method(
             crate::api::schema::Method::TabClose(crate::api::schema::TabTarget { tab_id }),
@@ -1043,6 +1051,34 @@ impl ClientShellState {
 
     pub(super) fn open_confirm_close_overlay(&mut self, workspace_id: String) {
         self.open_close_confirmation(workspace_id, None);
+    }
+
+    fn open_tab_close_confirmation(&mut self, workspace_id: String, tab_id: String) -> bool {
+        let Some(snapshot) = self.snapshot.as_deref() else {
+            return false;
+        };
+        let Some(tab) = snapshot.tabs.iter().find(|tab| tab.tab_id == tab_id) else {
+            return false;
+        };
+        let pane_count = snapshot
+            .panes
+            .iter()
+            .filter(|pane| pane.tab_id == tab_id)
+            .count();
+        let detail = format!("{} — {}", tab.label, pane_count_label(pane_count));
+        let Some(workspace) = self.navigation_target(&self.active_endpoint_id, &workspace_id)
+        else {
+            return false;
+        };
+        self.overlay = Some(ClientShellOverlay::ConfirmClose(
+            ClientConfirmCloseOverlay {
+                workspace_id,
+                tab_target: Some(ClientTabCloseConfirmation { tab_id, workspace }),
+                title: "Close tab?".to_owned(),
+                detail,
+            },
+        ));
+        true
     }
 
     fn open_close_confirmation(&mut self, workspace_id: String, tab_id: Option<String>) -> bool {
@@ -1099,11 +1135,7 @@ impl ClientShellState {
                     .count()
             })
             .sum::<usize>();
-        let panes = if pane_count == 1 {
-            "1 pane".to_owned()
-        } else {
-            format!("{pane_count} panes")
-        };
+        let panes = pane_count_label(pane_count);
         let scope = if closes_group {
             format!("{} workspaces, {panes}", group.len())
         } else {
@@ -1122,5 +1154,13 @@ impl ClientShellState {
             },
         ));
         true
+    }
+}
+
+fn pane_count_label(count: usize) -> String {
+    if count == 1 {
+        "1 pane".to_owned()
+    } else {
+        format!("{count} panes")
     }
 }

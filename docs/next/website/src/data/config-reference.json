@@ -944,7 +944,13 @@
           "key": "ui.confirm_close",
           "type": "boolean",
           "default": "true",
-          "description": "Ask for confirmation before closing a workspace."
+          "description": "Ask for confirmation before closing a workspace, including by closing its last tab."
+        },
+        {
+          "key": "ui.confirm_close_tab",
+          "type": "boolean",
+          "default": "false",
+          "description": "Ask for confirmation before closing a tab from the keybinding or tab menu when the workspace has other tabs. The last tab follows ui.confirm_close. CLI and socket tab.close never prompt."
         },
         {
           "key": "ui.prompt_new_tab_name",
