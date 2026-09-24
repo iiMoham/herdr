@@ -64,6 +64,8 @@ Iterate narrow, finish wide:
    - Otherwise `just ci && just docs-contract-test`, and state in the report that the Windows
      cross-lint stage was skipped because the SDK is not set up. Do not install the SDK without
      asking: it requires accepting Microsoft's license.
+4. `just fork-plugins-test` whenever anything under `plugins/` changed (fork plugins are not part of
+   upstream's `just test`).
 
 To prove a test catches the bug, temporarily break the fix and confirm the test fails. Restore with
 `git checkout -- <file>` or edit it back, then `touch <file>`. Never restore with `cp`/`mv` of a backup:
