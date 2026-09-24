@@ -1,38 +1,52 @@
 ---
 name: herdr-feature-roadmap
-description: The fork's 13-feature UX roadmap for herdr - feature order, per-feature specs, classification (TUI / server-runtime / plugin), and status tracking in .local/prd/STATUS.md. Use when picking the next feature, planning one, or updating roadmap status.
+description: The fork's high-impact feature roadmap for herdr - feature order, per-feature specs, classification (TUI / server-runtime / plugin), and status tracking in .local/prd/STATUS.md. Use when picking the next feature, planning one, or updating roadmap status.
 ---
 
 # herdr-plus feature roadmap
 
-Thirteen user-experience features for the personal fork, each sourced from a real request in
+High-impact features for the personal fork, each sourced from a real request in
 upstream herdr GitHub Discussions (read-only research; never post there). Specs live in
 `references/`. They were written against upstream commit `d11c0c34` (2026-09-24). Upstream moves
 fast: verify every path and symbol before planning, and trust the code over the spec.
 
 ## Order
 
-The order goes from small, isolated TUI changes to features that touch the server API, and ends
-with the two that need a wire/protocol decision. Do not reorder without asking; later features
-reuse patterns from earlier ones.
+Feature ids (`NN`) are stable identifiers, not positions: dropped ids are never reused and new
+features get the next free id. Work top to bottom through the "Next" table. Do not reorder without
+asking; the user chose this order for impact (2026-09-24: "focus on those who really have big impact,
+not small adjustments").
 
-| NN | Slug | Class | Size | Source | Notes |
+### Next (in order)
+
+| Order | NN | Slug | Class | Size | Source |
 | --- | --- | --- | --- | --- | --- |
-| 01 | `confirm-close-tab` | TUI | S | discussion #4533 | reuses the workspace confirm dialog |
-| 02 | `tab-bar-padding` | TUI | S | #4398 | client layout geometry |
-| 03 | `sidebar-spacing` | TUI | S | #4530, #4534 | Spaces header padding + worktree child gap |
-| 04 | `indexed-colors` | config / TUI | S | #4514 | `ansi:N` / 256-color indexes in theme colors |
-| 05 | `space-path-token` | TUI (+ maybe snapshot) | M | #4584 | `path` token for Space rows |
-| 06 | `update-check-intervals` | server config | S | #4485 | replaces the hard-coded 30 min interval |
-| 07 | `config-includes` | config loading | M | #4265 | `include = [...]` layering |
-| 08 | `pane-balance` | server API + CLI + key | M | #4527 | new `pane.balance` method |
-| 09 | `idle-agent-reminder` | plugin | M | #4431 | notify when an agent sits idle too long |
-| 10 | `workstream-shortcuts` | plugin | M | #4526 | start/finish a worktree workstream |
-| 11 | `pinned-panes` | plugin | S | #4522 | pin marker via pane metadata tokens |
-| 12 | `tab-bar-right-styles` | TUI + snapshot field | M | #4305 | per-entry fg/bg/bold + rules; wire decision |
-| 13 | `input-sync` | server runtime + TUI | L | #4423 / #949 | broadcast typed input to a tab's panes; input path |
+| 1 | 13 | `input-sync` | server runtime + TUI | L | #949 (17 upvotes), #4423 |
+| 2 | 14 | `pane-output-stream` | server API/events | M | #4435 |
+| 3 | 15 | `safe-worktree-removal` | server + TUI + plugin hook | M | #4513 |
+| 4 | 10 | `workstream-shortcuts` | plugin | M | #4526 |
+| 5 | 16 | `notification-to-pane` | client + platform | L | #4531, #4396 |
+| 6 | 17 | `shared-done-acks` | server + client | M | #4420 |
+| 7 | 09 | `idle-agent-reminder` | plugin | M | #4431 |
+| 8 | 18 | `session-switch` | client lifecycle | L | #4292 |
+| 9 | 07 | `config-includes` | config loading | M | #4265 |
+| 10 | 08 | `pane-balance` | server API + CLI + key | M | #4527 |
 
-Features 12 and 13 require a stop-and-ask before implementation (see their specs).
+Every L/M core feature above has a stop-and-ask checkpoint in its spec: present the design decision
+before writing code.
+
+### Done
+
+| NN | Slug | Notes |
+| --- | --- | --- |
+| 01 | `confirm-close-tab` | merged |
+| 02 | `tab-bar-padding` | merged |
+
+### Dropped (specs kept in `references/dropped/`)
+
+03 `sidebar-spacing`, 04 `indexed-colors`, 05 `space-path-token`, 06 `update-check-intervals`,
+11 `pinned-panes`, 12 `tab-bar-right-styles`: cosmetic or low-impact. Do not propose features of
+this kind (padding, spacing, color syntax, labels) unless the user asks.
 
 ## Workflow per feature
 
