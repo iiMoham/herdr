@@ -138,6 +138,12 @@ herdr notification show <title> [--body TEXT] [--position top-left|top-right|bot
 
 `notification show` uses the configured `[ui.toast]` delivery. `--position` only affects in-app Herdr toasts. `--sound` defaults to `none`; `done` and `request` play the existing finished and needs-attention sounds only when the notification is shown.
 
+```bash
+herdr notification open-target --client-socket PATH --token TOKEN
+```
+
+`notification open-target` is the command a clicked system notification runs (macOS with `terminal-notifier`): it asks the Herdr window that showed the notification, through that window's private socket, to open the pane the notification came from. Tokens are single-use and only the newest 32 notifications per window stay clickable.
+
 ## Sessions
 
 ```bash

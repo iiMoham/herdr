@@ -30,5 +30,9 @@ pub(super) enum ClientLoopEvent {
         /// latest target have the same identity after restoration.
         force: bool,
     },
+    /// A clicked system notification asks this client to open its pane.
+    NotificationClicked {
+        token: String,
+    },
     Timer,
 }

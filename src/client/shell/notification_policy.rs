@@ -83,17 +83,71 @@ impl ClientShellState {
         let Some(pane_id) = notification.event.pane_id else {
             return;
         };
-        if notification.endpoint_id == self.active_endpoint_id {
+        self.focus_notification_target(notification.endpoint_id, pane_id, outcome);
+    }
+
+    /// Focus `pane_id` on `endpoint_id`, switching machines when it is not the
+    /// one this client is viewing.
+    fn focus_notification_target(
+        &mut self,
+        endpoint_id: ClientEndpointId,
+        pane_id: String,
+        outcome: &mut ClientShellInput,
+    ) {
+        if endpoint_id == self.active_endpoint_id {
             self.push_endpoint_method(
                 crate::api::schema::Method::PaneFocus(crate::api::schema::PaneTarget { pane_id }),
                 outcome,
             );
-        } else if self.endpoint_is_online(&notification.endpoint_id) {
+        } else if self.endpoint_is_online(&endpoint_id) {
             outcome.actions.push(ClientShellAction::ActivateEndpoint {
-                endpoint_id: notification.endpoint_id,
+                endpoint_id,
                 target: Some(ClientEndpointFocusTarget::Pane(pane_id)),
             });
         }
+    }
+
+    pub(super) fn remember_notification_click(
+        &mut self,
+        endpoint_id: ClientEndpointId,
+        pane_id: String,
+    ) -> String {
+        let token = format!("{}-{}", std::process::id(), self.next_notification_click);
+        self.next_notification_click = self.next_notification_click.wrapping_add(1);
+        if self.notification_clicks.len() >= MAX_NOTIFICATION_CLICKS {
+            self.notification_clicks.pop_front();
+        }
+        self.notification_clicks.push_back(ClientNotificationClick {
+            token: token.clone(),
+            endpoint_id,
+            pane_id,
+        });
+        token
+    }
+
+    /// A system notification was clicked: open its pane. Unknown or expired
+    /// tokens do nothing; an offline machine reports that it is unavailable.
+    pub(crate) fn open_notification_click(&mut self, token: &str) -> ClientShellInput {
+        let mut outcome = ClientShellInput::default();
+        let Some(index) = self
+            .notification_clicks
+            .iter()
+            .position(|click| click.token == token)
+        else {
+            return outcome;
+        };
+        let Some(click) = self.notification_clicks.remove(index) else {
+            return outcome;
+        };
+        if !self.endpoint_is_online(&click.endpoint_id) {
+            let label = self.endpoint_label(&click.endpoint_id).to_owned();
+            self.receive_endpoint_unavailable(format!("{label} is unavailable"));
+            outcome.repaint = true;
+            return outcome;
+        }
+        outcome.repaint = true;
+        self.focus_notification_target(click.endpoint_id, click.pane_id, &mut outcome);
+        outcome
     }
 
     pub(crate) fn receive_notification(
@@ -229,9 +283,13 @@ impl ClientShellState {
                     });
                 }
                 crate::config::ToastDelivery::System if !suppress_external => {
+                    let click_token = pending.event.pane_id.clone().map(|pane_id| {
+                        self.remember_notification_click(pending.endpoint_id.clone(), pane_id)
+                    });
                     effects.push(ClientShellNotificationEffect::System {
                         title: pending.event.title,
                         body: pending.event.body,
+                        click_token,
                     });
                 }
                 crate::config::ToastDelivery::Terminal | crate::config::ToastDelivery::System => {}
