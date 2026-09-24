@@ -65,6 +65,11 @@ Iterate narrow, finish wide:
      cross-lint stage was skipped because the SDK is not set up. Do not install the SDK without
      asking: it requires accepting Microsoft's license.
 
+To prove a test catches the bug, temporarily break the fix and confirm the test fails. Restore with
+`git checkout -- <file>` or edit it back, then `touch <file>`. Never restore with `cp`/`mv` of a backup:
+the older mtime makes Cargo keep the broken artifacts, so later test runs and `target/debug/herdr`
+silently use the mutated code.
+
 Never skip, `#[ignore]`, or delete a test to get green. Never edit frozen compatibility fixtures
 (`tests/fixtures/endpoint-*-v1.json`, bincode digests, wire-tag tests) to bless a change.
 
@@ -119,6 +124,11 @@ Use the `herdr-throwaway-repro` skill. Fork-specific rules on top of it:
   repro directory under `/var/tmp`. Never edit `~/.config/herdr/config.toml`.
 - TUI-only features: capture the nested client pane with `pane read` from the parent session and
   quote the relevant lines in the report.
+- Drive the nested TUI from the parent with `herdr pane send-keys <outer> ctrl+b` then
+  `herdr pane send-text <outer> X`. Wait about a second after `esc` before the next key: an Esc
+  followed quickly by `ctrl+b` is parsed as Alt+Ctrl+B and the prefix is lost.
+- Before launching, rebuild with `cargo build` and check `target/debug/herdr` is newer than your last
+  source edit (`stat -f %Sm`).
 - Record binary path, `herdr --version` output, commands run, and what was observed.
 - Clean up: stop only the disposable named session's server, then close only the outer pane you created.
 
@@ -136,7 +146,7 @@ After the user approves:
 
 ```bash
 git switch herdr-plus
-git merge --no-ff feat/<NN>-<slug> -m "merge: feat/<NN>-<slug>"
+git merge --no-ff feat/<NN>-<slug> -m "chore: merge feat/<NN>-<slug>"   # commit-msg hook rejects "merge:"
 ```
 
 Then update `.local/prd/STATUS.md`. Ask before `git push origin herdr-plus`, before deleting branches,
