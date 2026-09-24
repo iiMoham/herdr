@@ -24,6 +24,11 @@ class WindowsInputGauntletTests(unittest.TestCase):
                     self.assertTrue(bytes.fromhex(value))
         self.assertEqual(self.cases["dead-acute"]["kind"], "layout-key")
         self.assertEqual(self.cases["altgr-euro"]["kind"], "manual")
+        for spec in self.matrix["release_plan"]:
+            for case_id in spec["cases"]:
+                self.assertIn(spec["mode"], self.cases[case_id]["expected"])
+                self.assertNotIn(self.cases[case_id]["kind"], {"manual", "qualification"})
+        self.assertFalse({"page-up", "page-down"} & {case_id for spec in self.matrix["release_plan"] for case_id in spec["cases"]})
 
     def test_default_catalogue_does_not_inject_terminal_host_actions(self):
         for case_id in ["ctrl-v", "alt-enter", "ctrl-shift-up", "ctrl-shift-down", "ctrl-shift-home", "ctrl-shift-end"]:
@@ -199,6 +204,40 @@ class WindowsInputGauntletTests(unittest.TestCase):
                        {"observations": observations}):
             rows = {row[0]: row[1:] for row in qualification_matrix(result)}
             self.assertEqual(rows["Shift+Enter"][0], "PARTIAL")
+
+    def test_release_matrix_uses_its_paired_hosts(self):
+        observations = [{"host": spec["channel"], "path": spec["path"], "mode": spec["mode"],
+                         "case": case, "status": "pass", "width": width}
+                        for spec in self.matrix["release_plan"] for width in (120, 80) for case in spec["cases"]]
+        nominal_only = [row for row in observations if row["width"] == 120]
+        rows = {row[0]: row[1:] for row in qualification_matrix({"campaign": "release", "observations": nominal_only})}
+        self.assertEqual(rows["Resize 120 -> 80"], ("PARTIAL", "PARTIAL"))
+        rows = {row[0]: row[1:] for row in qualification_matrix({"campaign": "release", "observations": observations})}
+        for name, cells in rows.items():
+            self.assertEqual(cells, ("MANUAL", "MANUAL") if name in {"PageUp/PageDown scroll", "AltGr", "IME composition"}
+                             else ("PASS", "PASS"), name)
+        failure = next(row for row in observations if row["host"] == "stable" and row["mode"] == "mok2"
+                       and row["case"] == "letter-a" and row["width"] == 120)
+        failure["status"] = "fail"
+        rows = {row[0]: row[1:] for row in qualification_matrix({"campaign": "release", "observations": observations})}
+        self.assertEqual(rows["Resize 120 -> 80"][0], "FAIL")
+        self.assertEqual(rows["PageUp/PageDown scroll"], ("MANUAL", "MANUAL"))
+        failure["status"] = "pass"
+        partial = next(row for row in observations if row["host"] == "preview" and row["mode"] == "kitty"
+                       and row["case"] == "shift-enter" and row["width"] == 80)
+        partial["status"] = "inconclusive"
+        rows = {row[0]: row[1:] for row in qualification_matrix({"campaign": "release", "observations": observations})}
+        self.assertEqual(rows["Shift+Enter"][1], "INCONCLUSIVE")
+
+    def test_run_spec_planning_does_not_require_other_combinations(self):
+        document = {"channels": ["stable"], "widths": [80], "heights": [24],
+                    "run_specs": [{"channel": "stable", "path": "herdr", "mode": "legacy", "cases": ["letter-a"]}],
+                    "observations": [{"host": "stable", "path": "herdr", "mode": "legacy", "phase": 1,
+                                      "width": 120, "height": 30, "case": "letter-a", "status": "not_run"}]}
+        self.assertEqual(summarize(document)["coverage_missing"], 2)
+        document["observations"][0]["mode"] = "kitty"
+        with self.assertRaisesRegex(ValueError, "outside the declared run matrix"):
+            summarize(document)
 
     def test_direct_legacy_limit_requires_unsupported_from_every_channel(self):
         observations = [{"host": host, "case": "shift-enter", "path": "direct", "mode": "legacy", "status": status}
