@@ -279,6 +279,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Ask for confirmation before closing a workspace
 # confirm_close = true
 
+# Ask for confirmation before closing a tab that is not the workspace's last tab.
+# Closing the last tab closes the workspace, which confirm_close governs.
+# confirm_close_tab = false
+
 # Ask for a tab name before creating a new tab.
 # Set false to create tabs immediately with generated names.
 # prompt_new_tab_name = true

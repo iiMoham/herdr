@@ -3,6 +3,10 @@ use crate::api::schema::Method;
 use crossterm::event::{MouseButton, MouseEventKind};
 
 fn close_state(confirm: bool, tab_count: usize) -> ClientShellState {
+    close_state_with(confirm, false, tab_count)
+}
+
+fn close_state_with(confirm: bool, confirm_tab: bool, tab_count: usize) -> ClientShellState {
     let mut projected = snapshot();
     for number in 2..=tab_count {
         let mut tab = projected.tabs[0].clone();
@@ -13,6 +17,7 @@ fn close_state(confirm: bool, tab_count: usize) -> ClientShellState {
     }
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     state.config.confirm_close = confirm;
+    state.config.confirm_close_tab = confirm_tab;
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     state.compose(106, 24).unwrap();
@@ -237,5 +242,110 @@ fn last_tab_close_preserves_parent_group_and_linked_workspace_scope() {
                     if matches!(&request.method, Method::WorkspaceClose(params)
                         if params.workspace_id == "ws_1" && params.close_group)));
         }
+    }
+}
+
+fn assert_confirm_overlay(state: &ClientShellState, expected_title: &str) {
+    assert!(matches!(state.overlay.as_ref(),
+        Some(ClientShellOverlay::ConfirmClose(confirm)) if confirm.title == expected_title));
+}
+
+#[test]
+fn confirm_close_tab_defaults_off_and_parses_from_config() {
+    assert!(!Config::default().ui.confirm_close_tab);
+    assert!(!ClientShellConfig::from_config(&Config::default()).confirm_close_tab);
+    let config: Config = toml::from_str("[ui]\nconfirm_close_tab = true\n").unwrap();
+    assert!(config.ui.confirm_close_tab);
+    assert!(ClientShellConfig::from_config(&config).confirm_close_tab);
+}
+
+#[test]
+fn confirm_close_tab_applies_on_live_reload() {
+    let mut shell_config = ClientShellConfig::from_config(&Config::default());
+    let mut config = Config::default();
+    config.ui.confirm_close_tab = true;
+    shell_config.apply_live_config(&config, &[], &[]);
+    assert!(shell_config.confirm_close_tab);
+    config.ui.confirm_close_tab = false;
+    shell_config.apply_live_config(&config, &[], &[]);
+    assert!(!shell_config.confirm_close_tab);
+}
+
+#[test]
+fn non_last_tab_close_waits_for_keyboard_or_mouse_confirmation() {
+    for confirm_workspace in [false, true] {
+        for menu in [false, true] {
+            let mut state = close_state_with(confirm_workspace, true, 2);
+            let requested = request_close(&mut state, menu);
+            assert_no_close(&requested);
+            assert!(requested.repaint);
+            assert_confirm_overlay(&state, "Close tab?");
+            let frame = state.compose(106, 24).unwrap();
+            let text = frame_rows(&frame).join("\n");
+            assert!(text.contains("Close tab?"));
+            assert!(text.contains("1 pane"));
+            let accepted = if menu {
+                let primary = state.hits.overlay_primary;
+                click(&mut state, primary)
+            } else {
+                state.handle_input_bytes(b"\r")
+            };
+            assert_tab_close(&accepted);
+            assert!(state.overlay.is_none());
+        }
+    }
+}
+
+#[test]
+fn non_last_tab_close_confirmation_can_be_cancelled() {
+    for mouse in [false, true] {
+        let mut state = close_state_with(true, true, 2);
+        assert_no_close(&request_close(&mut state, false));
+        assert_confirm_overlay(&state, "Close tab?");
+        state.compose(106, 24).unwrap();
+        let cancelled = if mouse {
+            let cancel = state.hits.overlay_cancel;
+            click(&mut state, cancel)
+        } else {
+            state.handle_input_bytes(b"\x1b")
+        };
+        assert_no_close(&cancelled);
+        assert!(state.overlay.is_none());
+    }
+}
+
+#[test]
+fn last_tab_close_prompts_once_and_only_through_confirm_close() {
+    let mut state = close_state_with(true, true, 1);
+    assert_no_close(&request_close(&mut state, false));
+    assert_confirm_overlay(&state, "Close workspace?");
+    assert_tab_close(&state.handle_input_bytes(b"\r"));
+    assert!(state.overlay.is_none());
+
+    for menu in [false, true] {
+        let mut state = close_state_with(false, true, 1);
+        assert_tab_close(&request_close(&mut state, menu));
+        assert!(state.overlay.is_none());
+    }
+}
+
+#[test]
+fn non_last_tab_confirmation_rejects_missing_moved_or_reconnected_targets() {
+    for change in ["missing", "moved", "reconnected"] {
+        let mut state = close_state_with(false, true, 2);
+        assert_no_close(&request_close(&mut state, false));
+        assert_confirm_overlay(&state, "Close tab?");
+        let mut projected = state.snapshot.as_deref().unwrap().clone();
+        match change {
+            "missing" => projected.tabs.retain(|tab| tab.tab_id != "tab_1"),
+            "moved" => projected.tabs[0].workspace_id = "different_workspace".into(),
+            "reconnected" => state.endpoints[0].snapshot_generation = Some(2),
+            _ => unreachable!(),
+        }
+        if change != "reconnected" {
+            state.set_snapshot(Box::new(projected));
+        }
+        assert_no_close(&state.handle_input_bytes(b"\r"));
+        assert!(state.overlay.is_none());
     }
 }
