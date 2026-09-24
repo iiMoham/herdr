@@ -27,6 +27,7 @@ mod frame_output;
 mod handshake;
 mod input;
 mod loop_config;
+pub(crate) mod notification_click;
 mod notifications;
 mod shell;
 mod shell_runtime;
@@ -461,6 +462,14 @@ async fn run_client_loop(
 
     // Channel for events from the resize and server reader threads.
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<ClientLoopEvent>(256);
+    // Lets clicked system notifications (terminal-notifier -execute) open their pane here.
+    // Started on every platform; only macOS notifications carry click commands today.
+    let notification_clicks = notification_click::NotificationClickListener::start(
+        &crate::config::state_dir().join("client-control"),
+        event_tx.clone(),
+    )
+    .map_err(|err| warn!(err = %err, "notification clicks unavailable"))
+    .ok();
     let (supervisor_tx, mut supervisor_rx) =
         tokio::sync::mpsc::channel::<endpoint::EndpointSupervisorEvent>(64);
     // Keep Windows console draining independent of server-frame backpressure.
@@ -756,6 +765,28 @@ async fn run_client_loop(
 
         match event {
             ClientLoopEvent::EndpointCatalog(reload) => pending_catalog = Some(reload),
+            ClientLoopEvent::NotificationClicked { token } => {
+                let Some(shell) = state.shell.as_mut() else {
+                    continue;
+                };
+                let outcome = shell.open_notification_click(&token);
+                let frame = outcome
+                    .repaint
+                    .then(|| shell.compose(state.reported_size.0, state.reported_size.1))
+                    .flatten();
+                if finish_client_shell_input(
+                    &mut state,
+                    outcome,
+                    frame,
+                    &mut write_stream,
+                    &mut pending_activation,
+                    &mut endpoint_commands,
+                    &mut prefix_input_source,
+                    &mut scheduled_activation,
+                )? {
+                    return Ok(());
+                }
+            }
             #[cfg(unix)]
             ClientLoopEvent::StdinInput(data) => {
                 let image_bridge_active = endpoint_accepts_local_images(
@@ -1630,7 +1661,11 @@ async fn run_client_loop(
                                     .flatten();
                                 (effects, frame)
                             };
-                            handle_shell_notification_effects(effects, &state.sound_config);
+                            handle_shell_notification_effects(
+                                effects,
+                                &state.sound_config,
+                                notification_clicks.as_ref(),
+                            );
                             if let Some(frame) = frame {
                                 state.present_frame(frame);
                             }
@@ -2143,7 +2178,11 @@ async fn run_client_loop(
                             .flatten();
                         (effects, outcome, frame)
                     };
-                    handle_shell_notification_effects(effects, &state.sound_config);
+                    handle_shell_notification_effects(
+                        effects,
+                        &state.sound_config,
+                        notification_clicks.as_ref(),
+                    );
                     if finish_client_shell_input(
                         &mut state,
                         outcome,

@@ -733,18 +733,24 @@ fn unique_timestamp_nanos() -> u128 {
 /// Show a native macOS notification.
 ///
 /// Prefer `terminal-notifier` when it is installed because it can activate the
-/// hosting terminal on click. Fall back to built-in AppleScript notifications
-/// when it is not available.
-pub fn show_desktop_notification(title: &str, body: Option<&str>) -> std::io::Result<bool> {
-    show_desktop_notification_with_command(title, body, |program| Command::new(program))
+/// hosting terminal on click and run `on_click`, a `/bin/sh` command the caller
+/// has already quoted. Fall back to built-in AppleScript notifications, which
+/// cannot react to clicks, when it is not available.
+pub fn show_desktop_notification(
+    title: &str,
+    body: Option<&str>,
+    on_click: Option<&str>,
+) -> std::io::Result<bool> {
+    show_desktop_notification_with_command(title, body, on_click, |program| Command::new(program))
 }
 
 fn show_desktop_notification_with_command(
     title: &str,
     body: Option<&str>,
+    on_click: Option<&str>,
     mut command: impl FnMut(&str) -> Command,
 ) -> std::io::Result<bool> {
-    if show_terminal_notifier_notification(title, body, &mut command).unwrap_or(false) {
+    if show_terminal_notifier_notification(title, body, on_click, &mut command).unwrap_or(false) {
         return Ok(true);
     }
 
@@ -754,6 +760,7 @@ fn show_desktop_notification_with_command(
 fn show_terminal_notifier_notification(
     title: &str,
     body: Option<&str>,
+    on_click: Option<&str>,
     command: &mut impl FnMut(&str) -> Command,
 ) -> std::io::Result<bool> {
     let activate_bundle_id = verified_terminal_bundle_identifier(command);
@@ -761,6 +768,7 @@ fn show_terminal_notifier_notification(
         title,
         body,
         activate_bundle_id.as_deref(),
+        on_click,
         command,
     )
 }
@@ -769,10 +777,11 @@ fn show_terminal_notifier_notification_with_options(
     title: &str,
     body: Option<&str>,
     activate_bundle_id: Option<&str>,
+    on_click: Option<&str>,
     command: &mut impl FnMut(&str) -> Command,
 ) -> std::io::Result<bool> {
     let mut cmd = command("terminal-notifier");
-    build_terminal_notifier_command(&mut cmd, title, body, activate_bundle_id);
+    build_terminal_notifier_command(&mut cmd, title, body, activate_bundle_id, on_click);
     run_notification_command(cmd)
 }
 
@@ -781,11 +790,15 @@ fn build_terminal_notifier_command(
     title: &str,
     body: Option<&str>,
     activate_bundle_id: Option<&str>,
+    on_click: Option<&str>,
 ) {
     cmd.arg("-title").arg(title);
     cmd.arg("-message").arg(body.unwrap_or_default());
     if let Some(bundle_id) = activate_bundle_id {
         cmd.arg("-activate").arg(bundle_id);
+    }
+    if let Some(on_click) = on_click {
+        cmd.arg("-execute").arg(on_click);
     }
 }
 
@@ -1274,6 +1287,7 @@ mod tests {
             "pi finished",
             Some("workspace 1"),
             Some("com.mitchellh.ghostty"),
+            None,
         );
         let args = cmd
             .get_args()
@@ -1288,6 +1302,31 @@ mod tests {
                 "workspace 1",
                 "-activate",
                 "com.mitchellh.ghostty"
+            ]
+        );
+    }
+
+    #[test]
+    fn terminal_notifier_command_runs_the_click_command_as_one_argument() {
+        let mut cmd = Command::new("terminal-notifier");
+        build_terminal_notifier_command(
+            &mut cmd,
+            "claude needs input",
+            Some("repo · agents"),
+            Some("com.googlecode.iterm2"),
+            Some("'/bin/herdr' notification open-target --token 'n-1'"),
+        );
+        let args = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            &args[4..],
+            &[
+                "-activate",
+                "com.googlecode.iterm2",
+                "-execute",
+                "'/bin/herdr' notification open-target --token 'n-1'",
             ]
         );
     }
@@ -1312,6 +1351,7 @@ mod tests {
             "title",
             Some("body"),
             Some("com.mitchellh.ghostty"),
+            None,
             &mut command,
         )
         .expect("terminal-notifier command should run");
@@ -1342,8 +1382,9 @@ printf '%s\n' "$@" > "$HERDR_NOTIFY_ARGS"
                 .env("HERDR_NOTIFY_ARGS", &path);
             cmd
         };
-        let shown = show_desktop_notification_with_command("title", Some("body"), &mut command)
-            .expect("osascript fallback should run");
+        let shown =
+            show_desktop_notification_with_command("title", Some("body"), None, &mut command)
+                .expect("osascript fallback should run");
 
         assert!(shown);
         let args = std::fs::read_to_string(&path).expect("args file");

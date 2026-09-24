@@ -729,6 +729,9 @@ pub(crate) enum ClientShellNotificationEffect {
     System {
         title: String,
         body: Option<String>,
+        /// Opaque token that opens the notification's pane when the system
+        /// notification is clicked, if it has one.
+        click_token: Option<String>,
     },
 }
 
@@ -739,6 +742,16 @@ pub(super) struct ClientPendingNotification {
     pub(super) expires_at: std::time::Instant,
     pub(super) validate_state: bool,
 }
+
+/// Where a clickable system notification leads.
+pub(super) struct ClientNotificationClick {
+    pub(super) token: String,
+    pub(super) endpoint_id: ClientEndpointId,
+    pub(super) pane_id: String,
+}
+
+/// Clickable system notifications remembered for navigation; older ones expire.
+pub(super) const MAX_NOTIFICATION_CLICKS: usize = 32;
 
 pub(super) struct ClientVisibleNotification {
     pub(super) endpoint_id: ClientEndpointId,
@@ -933,6 +946,8 @@ pub(crate) struct ClientShellState {
     pub(super) pending_integration_installs: usize,
     pub(super) pending_notifications: Vec<ClientPendingNotification>,
     pub(super) visible_notification: Option<ClientVisibleNotification>,
+    pub(super) notification_clicks: VecDeque<ClientNotificationClick>,
+    pub(super) next_notification_click: u64,
     pub(super) queued_notifications: VecDeque<ClientVisibleNotification>,
     pub(super) endpoint_notice_seen: HashSet<ClientEndpointNoticeKey>,
     pub(super) visible_endpoint_notice: Option<ClientVisibleEndpointNotice>,
@@ -1098,6 +1113,8 @@ impl ClientShellState {
             pending_integration_installs: 0,
             pending_notifications: Vec::new(),
             visible_notification: None,
+            notification_clicks: VecDeque::new(),
+            next_notification_click: 1,
             queued_notifications: VecDeque::new(),
             endpoint_notice_seen: HashSet::new(),
             visible_endpoint_notice: None,

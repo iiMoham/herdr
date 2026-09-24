@@ -9,6 +9,7 @@ pub(super) fn run_notification_command(args: &[String]) -> std::io::Result<i32> 
 
     match subcommand {
         "show" => notification_show(&args[1..]),
+        "open-target" => notification_open_target(&args[1..]),
         "help" | "--help" | "-h" => {
             print_notification_help();
             Ok(0)
@@ -136,11 +137,91 @@ fn print_notification_help() {
     eprintln!(
         "  herdr notification show <title> [--body TEXT] [--position top-left|top-right|bottom-left|bottom-right] [--sound none|done|request]"
     );
+    eprintln!("  {NOTIFICATION_OPEN_TARGET_USAGE}");
+}
+
+const NOTIFICATION_OPEN_TARGET_USAGE: &str =
+    "herdr notification open-target --client-socket PATH --token TOKEN";
+
+/// Parsed `open-target` arguments: (client socket, token).
+fn parse_notification_open_target_args(
+    args: &[String],
+) -> Result<(std::path::PathBuf, String), String> {
+    let args = super::expand_equals_args(args, &["--client-socket", "--token"]);
+    let mut socket = None;
+    let mut token = None;
+    let mut index = 0;
+    while index < args.len() {
+        let value = args.get(index + 1).cloned();
+        match args[index].as_str() {
+            "--client-socket" => socket = Some(value.ok_or("missing value for --client-socket")?),
+            "--token" => token = Some(value.ok_or("missing value for --token")?),
+            other => return Err(format!("unknown option: {other}")),
+        }
+        index += 2;
+    }
+    match (socket, token) {
+        (Some(socket), Some(token)) => Ok((std::path::PathBuf::from(socket), token)),
+        _ => Err(format!("usage: {NOTIFICATION_OPEN_TARGET_USAGE}")),
+    }
+}
+
+/// Run by a clicked system notification: ask the Herdr client that showed it
+/// to open the pane it came from.
+fn notification_open_target(args: &[String]) -> std::io::Result<i32> {
+    let (socket, token) = match parse_notification_open_target_args(args) {
+        Ok(parsed) => parsed,
+        Err(message) => {
+            eprintln!("{message}");
+            return Ok(2);
+        }
+    };
+    match crate::client::notification_click::send_open_request(&socket, &token) {
+        Ok(()) => Ok(0),
+        Err(err) => {
+            eprintln!(
+                "could not reach the Herdr client at {}: {err}",
+                socket.display()
+            );
+            Ok(1)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    #[test]
+    fn open_target_requires_a_socket_and_a_token() {
+        assert_eq!(
+            parse_notification_open_target_args(&strings(&[
+                "--client-socket",
+                "/tmp/herdr control/1.sock",
+                "--token=42-7",
+            ])),
+            Ok((
+                std::path::PathBuf::from("/tmp/herdr control/1.sock"),
+                "42-7".to_owned()
+            ))
+        );
+        for invalid in [
+            &[][..],
+            &["--token", "42-7"][..],
+            &["--client-socket", "/tmp/s"][..],
+            &["--client-socket"][..],
+            &["--client-socket", "/tmp/s", "--token", "t", "--extra", "x"][..],
+        ] {
+            assert!(
+                parse_notification_open_target_args(&strings(invalid)).is_err(),
+                "{invalid:?}"
+            );
+        }
+    }
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_string()).collect()

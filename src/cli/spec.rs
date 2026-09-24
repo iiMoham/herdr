@@ -330,6 +330,15 @@ fn notification_command() -> Command {
                 ]))
                 .arg(option("sound", "SOUND").value_parser(["none", "done", "request"])),
         )
+        .subcommand(
+            Command::new("open-target")
+                .about("Open the pane a clicked system notification came from")
+                .arg(option("client-socket", "PATH").required(true))
+                .arg(option("token", "TOKEN").required(true))
+                .after_help(
+                    "Herdr puts this command on clickable system notifications (macOS with terminal-notifier); you rarely run it yourself.",
+                ),
+        )
 }
 
 fn agent_command() -> Command {
@@ -1210,6 +1219,24 @@ mod tests {
             error.kind(),
             clap::error::ErrorKind::MissingRequiredArgument
         );
+    }
+
+    #[test]
+    fn notification_open_target_needs_socket_and_token() {
+        assert!(super::command()
+            .try_get_matches_from([
+                "herdr",
+                "notification",
+                "open-target",
+                "--client-socket",
+                "/tmp/s",
+                "--token",
+                "1-2",
+            ])
+            .is_ok());
+        assert!(super::command()
+            .try_get_matches_from(["herdr", "notification", "open-target", "--token", "1-2"])
+            .is_err());
     }
 
     #[test]

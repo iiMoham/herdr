@@ -9,6 +9,7 @@ use super::shell;
 pub(super) fn handle_shell_notification_effects(
     effects: Vec<shell::ClientShellNotificationEffect>,
     sound_config: &crate::config::SoundConfig,
+    notification_clicks: Option<&super::notification_click::NotificationClickListener>,
 ) {
     for effect in effects {
         match effect {
@@ -24,10 +25,19 @@ pub(super) fn handle_shell_notification_effects(
                     warn!(err = %err, "failed to emit terminal notification");
                 }
             }
-            shell::ClientShellNotificationEffect::System { title, body } => {
-                if let Err(err) =
-                    crate::platform::show_desktop_notification(&title, body.as_deref())
-                {
+            shell::ClientShellNotificationEffect::System {
+                title,
+                body,
+                click_token,
+            } => {
+                let on_click = click_token
+                    .zip(notification_clicks)
+                    .map(|(token, clicks)| clicks.click_command(&token));
+                if let Err(err) = crate::platform::show_desktop_notification(
+                    &title,
+                    body.as_deref(),
+                    on_click.as_deref(),
+                ) {
                     warn!(err = %err, "failed to emit system notification");
                 }
             }
@@ -47,7 +57,7 @@ pub(super) fn handle_notify(
         body,
         sound_config,
         crate::terminal_notify::show_notification,
-        crate::platform::show_desktop_notification,
+        |title, body| crate::platform::show_desktop_notification(title, body, None),
     );
 }
 
