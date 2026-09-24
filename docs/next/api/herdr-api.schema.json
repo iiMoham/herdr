@@ -778,6 +778,15 @@
             "agent_status": {
               "$ref": "#/schemas/event/$defs/AgentStatus"
             },
+            "content_revision": {
+              "description": "Opaque, increasing revision of the pane's screen content. Changes whenever the\nvisible terminal content changes; absent when the pane has no live runtime.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "cwd": {
               "type": [
                 "string",
@@ -4345,6 +4354,50 @@
               "type": "object"
             },
             {
+              "description": "Sampled on the subscription cadence: at most one event per poll, carrying\nthe latest content revision after one or more screen changes.",
+              "properties": {
+                "include_text": {
+                  "default": false,
+                  "description": "Attach a `pane.read` of the new content to each event.",
+                  "type": "boolean"
+                },
+                "lines": {
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "pane_id": {
+                  "type": "string"
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/schemas/request/$defs/ReadSource"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "strip_ansi": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "type": {
+                  "const": "pane.output_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "pane_id"
+              ],
+              "type": "object"
+            },
+            {
               "properties": {
                 "type": {
                   "const": "layout.updated",
@@ -6555,6 +6608,38 @@
           ],
           "type": "object"
         },
+        "PaneOutputChangedEvent": {
+          "properties": {
+            "pane_id": {
+              "type": "string"
+            },
+            "read": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/subscription_event/$defs/PaneReadResult"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "revision": {
+              "description": "Opaque, increasing content revision (compare with `pane.read`'s `revision`).",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id",
+            "workspace_id",
+            "revision"
+          ],
+          "type": "object"
+        },
         "PaneOutputMatchedEvent": {
           "properties": {
             "matched_line": {
@@ -6685,6 +6770,9 @@
             },
             {
               "$ref": "#/schemas/subscription_event/$defs/PaneScrollChangedEvent"
+            },
+            {
+              "$ref": "#/schemas/subscription_event/$defs/PaneOutputChangedEvent"
             }
           ]
         },
@@ -6692,7 +6780,8 @@
           "enum": [
             "pane.output_matched",
             "pane.agent_status_changed",
-            "pane.scroll_changed"
+            "pane.scroll_changed",
+            "pane.output_changed"
           ],
           "type": "string"
         }
@@ -8060,6 +8149,15 @@
             },
             "agent_status": {
               "$ref": "#/schemas/success_response/$defs/AgentStatus"
+            },
+            "content_revision": {
+              "description": "Opaque, increasing revision of the pane's screen content. Changes whenever the\nvisible terminal content changes; absent when the pane has no live runtime.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
             },
             "cwd": {
               "type": [

@@ -36,6 +36,7 @@ pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
         "send-text" => pane_send_text(&args[1..]),
         "send-keys" => pane_send_keys(&args[1..]),
         "wait-output" => pane_wait_output(&args[1..]),
+        "watch" => pane_watch(&args[1..]),
         "report-agent" => pane_report_agent(&args[1..]),
         "report-agent-session" => pane_report_agent_session(&args[1..]),
         "release-agent" => pane_release_agent(&args[1..]),
@@ -1658,6 +1659,113 @@ fn pane_report_metadata(args: &[String]) -> std::io::Result<i32> {
     }))
 }
 
+const PANE_WATCH_USAGE: &str = "usage: herdr pane watch <pane_id> [--text] [--source visible|recent|recent-unwrapped] [--lines N] [--raw]";
+
+fn parse_pane_watch_args(args: &[String]) -> Result<crate::api::schema::Subscription, String> {
+    let args = super::expand_equals_args(args, &["--source", "--lines"]);
+    let mut pane_id = None;
+    let mut include_text = false;
+    let mut source = None;
+    let mut lines = None;
+    let mut strip_ansi = true;
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--text" => {
+                include_text = true;
+                index += 1;
+            }
+            "--source" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("missing value for --source".into());
+                };
+                source = Some(super::parse_read_source(value).map_err(|err| err.to_string())?);
+                index += 2;
+            }
+            "--lines" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("missing value for --lines".into());
+                };
+                lines =
+                    Some(super::parse_u32_flag("--lines", value).map_err(|err| err.to_string())?);
+                index += 2;
+            }
+            "--raw" => {
+                strip_ansi = false;
+                index += 1;
+            }
+            value if value.starts_with('-') => {
+                return Err(format!("unknown option: {value}\n{PANE_WATCH_USAGE}"));
+            }
+            value => {
+                if pane_id.is_some() {
+                    return Err(PANE_WATCH_USAGE.into());
+                }
+                pane_id = Some(super::normalize_pane_id(value));
+                index += 1;
+            }
+        }
+    }
+    let Some(pane_id) = pane_id else {
+        return Err(PANE_WATCH_USAGE.into());
+    };
+    Ok(crate::api::schema::Subscription::PaneOutputChanged {
+        pane_id,
+        include_text,
+        source,
+        lines,
+        strip_ansi,
+    })
+}
+
+/// Stream `pane.output_changed` events as JSON lines until interrupted or the server stops.
+fn pane_watch(args: &[String]) -> std::io::Result<i32> {
+    use std::io::Write as _;
+
+    let subscription = match parse_pane_watch_args(args) {
+        Ok(subscription) => subscription,
+        Err(message) => {
+            eprintln!("{message}");
+            return Ok(2);
+        }
+    };
+    let client = super::target::api_client()?;
+    let request = Request {
+        id: "cli:pane:watch".into(),
+        method: Method::EventsSubscribe(crate::api::schema::EventsSubscribeParams {
+            subscriptions: vec![subscription],
+        }),
+    };
+    let mut started = false;
+    let mut exit_code = 0;
+    let mut stdout = std::io::stdout().lock();
+    let result = client.stream_values(&request, |value| {
+        if !started {
+            started = true;
+            if let Err(err) = crate::api::client::parse_response_value(value) {
+                eprintln!("{err}");
+                exit_code = 1;
+                return Ok(false);
+            }
+            return Ok(true);
+        }
+        match writeln!(stdout, "{value}").and_then(|()| stdout.flush()) {
+            Ok(()) => Ok(true),
+            // A closed reader (for example `| head`) ends the watch quietly.
+            Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(false),
+            Err(err) => Err(err),
+        }
+    });
+    match result {
+        Ok(()) => Ok(exit_code),
+        Err(err) => {
+            eprintln!("{err}");
+            Ok(1)
+        }
+    }
+}
+
 fn print_pane_help() {
     eprintln!("herdr pane commands:");
     eprintln!("  herdr pane list [--workspace <workspace_id>]");
@@ -1687,6 +1795,7 @@ fn print_pane_help() {
     eprintln!("  herdr pane send-text <pane_id> <text>");
     eprintln!("  herdr pane send-keys <pane_id> <key> [key ...]");
     eprintln!("  herdr pane wait-output <pane_id> (--match TEXT | --regex PATTERN) [--source visible|recent|recent-unwrapped] [--lines N] [--timeout MS] [--raw]");
+    eprintln!("  herdr pane watch <pane_id> [--text] [--source visible|recent|recent-unwrapped] [--lines N] [--raw]");
     eprintln!("  herdr pane report-agent <pane_id> --source ID --agent LABEL --state idle|working|blocked|unknown [--message TEXT] [--seq N] [--agent-session-id ID] [--agent-session-path PATH]");
     eprintln!("  herdr pane report-agent-session <pane_id> --source ID --agent LABEL [--seq N] [--agent-session-id ID] [--agent-session-path PATH]");
     eprintln!("  herdr pane release-agent <pane_id> --source ID --agent LABEL [--seq N]");
@@ -2021,6 +2130,52 @@ mod tests {
         assert_eq!(params.pane_id, Some("issue-2".into()));
         assert_eq!(params.direction, PaneDirection::Left);
         assert_eq!(params.amount, Some(0.125));
+    }
+
+    #[test]
+    fn parse_pane_watch_args_maps_flags_to_the_subscription() {
+        use crate::api::schema::Subscription;
+
+        assert_eq!(
+            parse_pane_watch_args(&args(&["w1:p2"])).unwrap(),
+            Subscription::PaneOutputChanged {
+                pane_id: "w1:p2".into(),
+                include_text: false,
+                source: None,
+                lines: None,
+                strip_ansi: true,
+            }
+        );
+        assert_eq!(
+            parse_pane_watch_args(&args(&[
+                "--text",
+                "w1:p2",
+                "--source=visible",
+                "--lines",
+                "40",
+                "--raw"
+            ]))
+            .unwrap(),
+            Subscription::PaneOutputChanged {
+                pane_id: "w1:p2".into(),
+                include_text: true,
+                source: Some(ReadSource::Visible),
+                lines: Some(40),
+                strip_ansi: false,
+            }
+        );
+        for invalid in [
+            &[][..],
+            &["w1:p2", "w1:p3"][..],
+            &["w1:p2", "--lines"][..],
+            &["w1:p2", "--bogus"][..],
+            &["w1:p2", "--source", "nowhere"][..],
+        ] {
+            assert!(
+                parse_pane_watch_args(&args(invalid)).is_err(),
+                "{invalid:?}"
+            );
+        }
     }
 
     #[test]

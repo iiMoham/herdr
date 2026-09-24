@@ -3,8 +3,8 @@ use regex::Regex;
 use crate::api::event_hub::EventHistoryError;
 use crate::api::schema::{
     ErrorBody, ErrorResponse, EventKind, Method, PaneAgentStatusChangedEvent,
-    PaneOutputMatchedEvent, PaneScrollChangedEvent, PaneScrollInfo, Request, Subscription,
-    SubscriptionEventData, SubscriptionEventEnvelope, SubscriptionEventKind,
+    PaneOutputChangedEvent, PaneOutputMatchedEvent, PaneScrollChangedEvent, PaneScrollInfo,
+    Request, Subscription, SubscriptionEventData, SubscriptionEventEnvelope, SubscriptionEventKind,
 };
 use crate::api::server::{dispatch_to_app_with_timeout, APP_RESPONSE_TIMEOUT};
 use crate::api::{ApiRequestSender, EventHub};
@@ -63,6 +63,16 @@ pub(super) struct ActiveScrollChangedSubscription {
     request_prefix: String,
 }
 
+pub(super) struct ActiveOutputChangedSubscription {
+    pane_id: String,
+    include_text: bool,
+    source: crate::api::schema::ReadSource,
+    lines: Option<u32>,
+    strip_ansi: bool,
+    last_revision: Option<u64>,
+    request_prefix: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PanePresentationSnapshot {
     title: Option<String>,
@@ -102,6 +112,7 @@ pub(super) enum ActiveSubscription {
     OutputMatched(ActiveOutputMatchedSubscription),
     AgentStatusChanged(Box<ActiveAgentStatusChangedSubscription>),
     ScrollChanged(ActiveScrollChangedSubscription),
+    OutputChanged(ActiveOutputChangedSubscription),
 }
 
 impl ActiveSubscription {
@@ -244,6 +255,26 @@ impl ActiveSubscription {
                     request_prefix: format!("{request_id}:sub:{index}"),
                 }))
             }
+            Subscription::PaneOutputChanged {
+                pane_id,
+                include_text,
+                source,
+                lines,
+                strip_ansi,
+            } => {
+                let probe = pane_get(format!("{request_id}:sub:{index}:probe"), &pane_id, api_tx)?;
+
+                Ok(Self::OutputChanged(ActiveOutputChangedSubscription {
+                    pane_id: probe.pane_id,
+                    include_text,
+                    source: source.unwrap_or(crate::api::schema::ReadSource::Recent),
+                    lines,
+                    strip_ansi,
+                    // Existing content is the baseline; only later changes emit.
+                    last_revision: probe.content_revision,
+                    request_prefix: format!("{request_id}:sub:{index}"),
+                }))
+            }
         }
     }
 
@@ -261,6 +292,9 @@ impl ActiveSubscription {
                 serde_json::to_value(subscription.poll(api_tx, event_hub)?).ok()
             }
             Self::ScrollChanged(subscription) => {
+                serde_json::to_value(subscription.poll(api_tx)?).ok()
+            }
+            Self::OutputChanged(subscription) => {
                 serde_json::to_value(subscription.poll(api_tx)?).ok()
             }
         }
@@ -316,7 +350,7 @@ impl ActiveSubscription {
             }
             // These subscriptions sample current state, not retained event history.
             // Keep their existing cadence even when a lifecycle batch was nonempty.
-            Self::OutputMatched(_) | Self::ScrollChanged(_) => {
+            Self::OutputMatched(_) | Self::ScrollChanged(_) | Self::OutputChanged(_) => {
                 Ok(self.poll(api_tx, event_hub).into_iter().collect())
             }
         }
@@ -538,6 +572,63 @@ impl ActiveAgentStatusChangedSubscription {
     }
 }
 
+impl ActiveOutputChangedSubscription {
+    fn poll(&mut self, api_tx: &ApiRequestSender) -> Option<SubscriptionEventEnvelope> {
+        let pane = pane_get(
+            format!("{}:pane", self.request_prefix),
+            &self.pane_id,
+            api_tx,
+        )
+        .ok()?;
+        if !self.has_changed(&pane) {
+            return None;
+        }
+        let read = if self.include_text {
+            pane_read(
+                format!("{}:read", self.request_prefix),
+                &self.pane_id,
+                self.source,
+                self.lines,
+                self.strip_ansi,
+                api_tx,
+            )
+            .ok()
+        } else {
+            None
+        };
+        self.event_from_change(pane, read)
+    }
+
+    fn has_changed(&self, pane: &crate::api::schema::PaneInfo) -> bool {
+        pane.content_revision
+            .is_some_and(|revision| self.last_revision != Some(revision))
+    }
+
+    fn event_from_change(
+        &mut self,
+        pane: crate::api::schema::PaneInfo,
+        read: Option<crate::api::schema::PaneReadResult>,
+    ) -> Option<SubscriptionEventEnvelope> {
+        let revision = pane.content_revision?;
+        // A read can observe content newer than the probe; report that revision so
+        // the next poll does not emit again for text this event already carried.
+        let revision = read
+            .as_ref()
+            .map_or(revision, |read| read.revision.max(revision));
+        self.last_revision = Some(revision);
+
+        Some(SubscriptionEventEnvelope {
+            event: SubscriptionEventKind::PaneOutputChanged,
+            data: SubscriptionEventData::PaneOutputChanged(PaneOutputChangedEvent {
+                pane_id: pane.pane_id,
+                workspace_id: pane.workspace_id,
+                revision,
+                read,
+            }),
+        })
+    }
+}
+
 impl ActiveScrollChangedSubscription {
     fn poll(&mut self, api_tx: &ApiRequestSender) -> Option<SubscriptionEventEnvelope> {
         let pane = pane_get(
@@ -714,7 +805,96 @@ mod tests {
             agent_session: None,
             scroll,
             revision: 0,
+            content_revision: None,
         }
+    }
+
+    fn output_changed_subscription(last_revision: Option<u64>) -> ActiveOutputChangedSubscription {
+        ActiveOutputChangedSubscription {
+            pane_id: "pane_1".into(),
+            include_text: false,
+            source: crate::api::schema::ReadSource::Recent,
+            lines: None,
+            strip_ansi: true,
+            last_revision,
+            request_prefix: "test".into(),
+        }
+    }
+
+    fn pane_with_content(revision: Option<u64>) -> PaneInfo {
+        PaneInfo {
+            content_revision: revision,
+            ..pane_info_with_scroll(None)
+        }
+    }
+
+    fn read_at(revision: u64, text: &str) -> crate::api::schema::PaneReadResult {
+        crate::api::schema::PaneReadResult {
+            pane_id: "pane_1".into(),
+            workspace_id: "workspace_1".into(),
+            tab_id: "tab_1".into(),
+            source: crate::api::schema::ReadSource::Recent,
+            format: crate::api::schema::ReadFormat::Text,
+            text: text.into(),
+            revision,
+            truncated: false,
+        }
+    }
+
+    #[test]
+    fn output_changed_emits_only_when_the_content_revision_moves() {
+        let mut subscription = output_changed_subscription(Some(4));
+
+        assert!(!subscription.has_changed(&pane_with_content(Some(4))));
+        assert!(!subscription.has_changed(&pane_with_content(None)));
+        assert!(subscription.has_changed(&pane_with_content(Some(10))));
+
+        let event = subscription
+            .event_from_change(pane_with_content(Some(10)), None)
+            .expect("output changed event");
+        assert_eq!(event.event, SubscriptionEventKind::PaneOutputChanged);
+        let SubscriptionEventData::PaneOutputChanged(data) = event.data else {
+            panic!("wrong event data");
+        };
+        assert_eq!(data.pane_id, "pane_1");
+        assert_eq!(data.workspace_id, "workspace_1");
+        assert_eq!(data.revision, 10);
+        assert!(data.read.is_none());
+
+        // Several screen updates between polls collapse into this one event.
+        assert!(!subscription.has_changed(&pane_with_content(Some(10))));
+        assert!(subscription.has_changed(&pane_with_content(Some(12))));
+    }
+
+    #[test]
+    fn output_changed_with_text_reports_the_newer_read_revision() {
+        let mut subscription = output_changed_subscription(Some(2));
+        subscription.include_text = true;
+
+        let event = subscription
+            .event_from_change(pane_with_content(Some(6)), Some(read_at(8, "hello")))
+            .expect("output changed event");
+        let SubscriptionEventData::PaneOutputChanged(data) = event.data else {
+            panic!("wrong event data");
+        };
+        assert_eq!(data.revision, 8);
+        assert_eq!(data.read.expect("attached read").text, "hello");
+        // The read already carried revision 8, so a probe at 8 is not a new change.
+        assert!(!subscription.has_changed(&pane_with_content(Some(8))));
+    }
+
+    #[test]
+    fn output_changed_event_json_round_trips_through_the_untagged_payload() {
+        let mut subscription = output_changed_subscription(None);
+        let event = subscription
+            .event_from_change(pane_with_content(Some(2)), None)
+            .unwrap();
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["event"], "pane.output_changed");
+        assert_eq!(json["data"]["revision"], 2);
+        assert!(json["data"].get("read").is_none());
+        let decoded: SubscriptionEventEnvelope = serde_json::from_value(json).unwrap();
+        assert_eq!(decoded, event);
     }
 
     #[test]

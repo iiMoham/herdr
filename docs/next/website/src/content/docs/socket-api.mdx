@@ -854,7 +854,7 @@ Tab event subscriptions include `tab.created`, `tab.closed`, `tab.focused`,
 that workspace.
 Pane event subscriptions include `pane.created`, `pane.updated`, `pane.closed`, `pane.focused`,
 `pane.moved`, `pane.exited`, `pane.agent_detected`,
-`pane.output_matched`, `pane.agent_status_changed`, and `pane.scroll_changed`.
+`pane.output_matched`, `pane.agent_status_changed`, `pane.scroll_changed`, and `pane.output_changed`.
 `pane.focused` also reports manual pane selection changes from any client attached
 to this server. It does not move other clients' views, and its payload does not
 identify the client. Selecting an already-selected pane does not emit it again.
@@ -862,6 +862,21 @@ Terminal-title changes can emit `pane.updated`, but spinner-only raw-title chang
 `pane.scroll_changed` is scoped to one `pane_id` and emits `pane_id`,
 `workspace_id`, and the current `scroll` metrics whenever Herdr observes a
 changed scroll snapshot.
+`pane.output_changed` is scoped to one `pane_id` and emits `pane_id`,
+`workspace_id`, and `revision` whenever the pane's screen content changed since
+the last event. It is sampled on the subscription cadence (every 100 ms), so a
+burst of output produces one event carrying the latest revision, and existing
+content at subscribe time does not emit. Set `"include_text": true` to attach a
+`read` of the new content; `source` (default `recent`), `lines`, and
+`strip_ansi` work as in `pane.read`. Revisions increase but are opaque and not
+contiguous: compare them with `content_revision` from `pane.get` or `revision`
+from `pane.read` to tell whether content you hold is current. The subscription
+stops emitting when the pane closes; watch `pane.closed` to end it. It is not
+available as a plugin event hook.
+
+```json
+{"id":"sub_1","method":"events.subscribe","params":{"subscriptions":[{"type":"pane.output_changed","pane_id":"w1:p2","include_text":true,"lines":40}]}}
+```
 Layout event subscriptions include `layout.updated`. The event carries the
 updated `PaneLayoutSnapshot` for one tab. Clients maintaining a cache with
 `session.snapshot` should use this event to refresh the affected layout through
@@ -912,7 +927,8 @@ Successful responses look like this:
       "tab_id": "w1:t1",
       "focused": true,
       "agent_status": "working",
-      "revision": 42
+      "revision": 42,
+      "content_revision": 1184
     }
   }
 }

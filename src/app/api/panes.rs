@@ -1520,6 +1520,8 @@ impl App {
         else {
             return pane_not_found(id, &params.pane_id);
         };
+        // Sample before reading so the returned text is at least as new as `revision`.
+        let revision = pane.stable_content_revision();
         let snapshot = crate::app::api_helpers::read_terminal_snapshot(
             pane,
             params.source,
@@ -1537,7 +1539,7 @@ impl App {
                     source: params.source,
                     format: params.format,
                     text: snapshot.text,
-                    revision: 0,
+                    revision,
                     truncated: snapshot.truncated,
                 },
             },

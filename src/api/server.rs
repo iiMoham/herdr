@@ -1182,6 +1182,7 @@ mod tests {
             agent_session: None,
             scroll: None,
             revision: 0,
+            content_revision: None,
         }
     }
 

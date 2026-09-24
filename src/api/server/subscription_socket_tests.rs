@@ -237,6 +237,7 @@ fn reply_to_probe(request: ApiRequestMessage) {
                 agent_session: None,
                 scroll: None,
                 revision: 0,
+                content_revision: None,
             },
         },
         Method::PaneRead(_) => ResponseResult::PaneRead {
@@ -353,4 +354,92 @@ fn lagging_subscription_closes_without_interrupting_other_clients() {
     let response = ordinary.response();
     assert_eq!(response["id"], "ordinary");
     assert_eq!(response["result"]["type"], "workspace_list");
+}
+
+fn reply_with_content_revision(request: ApiRequestMessage, revision: u64) {
+    assert!(
+        matches!(request.request.method, Method::PaneGet(_)),
+        "expected a pane.get probe, got {:?}",
+        request.request.method
+    );
+    let mut pane = PaneInfo {
+        pane_id: "pane_1".into(),
+        terminal_id: "term_1".into(),
+        workspace_id: "workspace_1".into(),
+        tab_id: "tab_1".into(),
+        focused: true,
+        cwd: None,
+        foreground_cwd: None,
+        restore_error: None,
+        label: None,
+        agent: None,
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        display_agent: None,
+        agent_status: AgentStatus::Unknown,
+        state_labels: Default::default(),
+        tokens: Default::default(),
+        agent_session: None,
+        scroll: None,
+        revision: 0,
+        content_revision: None,
+    };
+    pane.content_revision = Some(revision);
+    reply(request, ResponseResult::PaneInfo { pane });
+}
+
+#[test]
+fn output_changed_streams_one_event_per_content_change_with_its_text() {
+    let mut test = SocketTest::new();
+    let mut client = test.connect();
+    client.subscribe(
+        "watch",
+        json!([{
+            "type": "pane.output_changed",
+            "pane_id": "pane_1",
+            "include_text": true
+        }]),
+    );
+    reply_with_content_revision(test.app_request(), 2);
+    client.assert_started("watch");
+
+    // Unchanged content: the poll reads nothing and emits nothing.
+    let unchanged = test.app_request();
+    assert_eq!(unchanged.request.id, "watch:sub:0:pane");
+    reply_with_content_revision(unchanged, 2);
+
+    // Changed content: the next poll reads the new text once and emits it.
+    reply_with_content_revision(test.app_request(), 6);
+    let read = test.app_request();
+    assert_eq!(read.request.id, "watch:sub:0:read");
+    let Method::PaneRead(params) = &read.request.method else {
+        panic!("expected pane.read, got {:?}", read.request.method);
+    };
+    assert_eq!(params.source, ReadSource::Recent);
+    reply(
+        read,
+        ResponseResult::PaneRead {
+            read: PaneReadResult {
+                pane_id: "pane_1".into(),
+                workspace_id: "workspace_1".into(),
+                tab_id: "tab_1".into(),
+                source: ReadSource::Recent,
+                format: ReadFormat::Text,
+                text: "new output".into(),
+                revision: 6,
+                truncated: false,
+            },
+        },
+    );
+    let event = client.response();
+    assert_eq!(event["event"], "pane.output_changed", "{event}");
+    assert_eq!(event["data"]["pane_id"], "pane_1");
+    assert_eq!(event["data"]["revision"], 6);
+    assert_eq!(event["data"]["read"]["text"], "new output");
+
+    // The revision the event carried is now the baseline: no duplicate event.
+    let next = test.app_request();
+    assert!(matches!(next.request.method, Method::PaneGet(_)));
+    reply_with_content_revision(next, 6);
 }

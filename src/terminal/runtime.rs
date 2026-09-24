@@ -589,6 +589,13 @@ impl TerminalRuntime {
     pub(crate) fn content_seq(&self) -> u64 {
         self.0.content_seq()
     }
+
+    /// Public content revision: the last completed screen update. `content_seq`
+    /// is odd while a write is in flight, so round down to the previous even value
+    /// instead of reporting a revision that has no stable content yet.
+    pub(crate) fn stable_content_revision(&self) -> u64 {
+        self.content_seq() & !1
+    }
 }
 
 #[cfg(test)]
