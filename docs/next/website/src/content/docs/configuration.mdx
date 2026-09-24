@@ -245,10 +245,10 @@ Choose a built-in theme:
 
 ```toml
 [theme]
-name = "catppuccin"
+name = "midnight-neon"
 ```
 
-Search `theme.name` in the [Config reference](/docs/config-reference/) for every built-in theme. Use `terminal` when you want Herdr UI colors to follow your host terminal's ANSI palette.
+The default is `midnight-neon`: cyan marks focus and working agents, magenta marks agents that need you, green marks finished work, and idle agents stay a calm periwinkle. Herdr never paints over your terminal's background, so for the full look set your terminal profile's background to `#0b1020`. Its light sibling is `neon-day`. Search `theme.name` in the [Config reference](/docs/config-reference/) for every built-in theme. Use `terminal` when you want Herdr UI colors to follow your host terminal's ANSI palette.
 
 To let Herdr switch its own UI theme when the host terminal reports a light/dark appearance change, enable theme auto-switching:
 

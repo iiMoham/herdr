@@ -37,8 +37,8 @@
         {
           "key": "theme.name",
           "type": "string",
-          "default": "\"catppuccin\"",
-          "description": "Built-in theme name."
+          "default": "\"midnight-neon\"",
+          "description": "Built-in theme name: midnight-neon, neon-day, catppuccin, catppuccin-latte, terminal, tokyo-night, tokyo-night-day, dracula, nord, gruvbox, gruvbox-light, one-dark, one-light, solarized, solarized-light, kanagawa, kanagawa-lotus, rose-pine, rose-pine-dawn, or vesper."
         },
         {
           "key": "theme.auto_switch",

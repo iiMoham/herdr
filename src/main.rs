@@ -71,16 +71,17 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # onboarding = true
 
 [theme]
-# Built-in themes: catppuccin, terminal, tokyo-night, dracula, nord,
-#                  gruvbox, one-dark, solarized, kanagawa, rose-pine,
-#                  vesper
-# name = "catppuccin"
+# Built-in themes: midnight-neon, neon-day, catppuccin, terminal, tokyo-night,
+#                  dracula, nord, gruvbox, one-dark, solarized, kanagawa,
+#                  rose-pine, vesper
+# midnight-neon is tuned for a #0b1020 navy terminal background.
+# name = "midnight-neon"
 
 # Follow host terminal light/dark appearance and switch Herdr UI themes.
 # Existing manual behavior is unchanged unless this is true.
 # auto_switch = false
-# dark_name = "catppuccin"
-# light_name = "catppuccin-latte"
+# dark_name = "midnight-neon"
+# light_name = "neon-day"
 
 # Override individual color tokens on top of the base theme.
 # Accepts: hex (#rrggbb), named colors, rgb(r,g,b), or panel_bg = "reset"
