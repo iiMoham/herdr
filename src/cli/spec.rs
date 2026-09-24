@@ -630,6 +630,18 @@ fn pane_command() -> Command {
                 ),
         )
         .subcommand(
+            Command::new("watch")
+                .about("Stream pane content changes as JSON lines")
+                .arg(required("pane_id", "PANE_ID"))
+                .arg(flag("text").help("Include the changed content in each event"))
+                .arg(read_source_option(false))
+                .arg(option("lines", "N").help("Limit included text to N lines"))
+                .arg(flag("raw").help("Keep ANSI escape sequences in included text"))
+                .after_help(
+                    "Emits one event per 100 ms at most, only when the screen changed. Runs until interrupted or the server stops.",
+                ),
+        )
+        .subcommand(
             Command::new("run")
                 .about("Run a command in a pane")
                 .arg(required("pane_id", "PANE_ID"))
@@ -1186,6 +1198,21 @@ mod tests {
             error.kind(),
             clap::error::ErrorKind::MissingRequiredArgument
         );
+    }
+
+    #[test]
+    fn pane_watch_accepts_a_pane_and_output_flags() {
+        for valid in [
+            &["herdr", "pane", "watch", "w1:p1"][..],
+            &[
+                "herdr", "pane", "watch", "w1:p1", "--text", "--lines", "20", "--raw",
+            ][..],
+        ] {
+            assert!(super::command().try_get_matches_from(valid).is_ok());
+        }
+        assert!(super::command()
+            .try_get_matches_from(["herdr", "pane", "watch"])
+            .is_err());
     }
 
     #[test]

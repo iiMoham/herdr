@@ -80,6 +80,21 @@ pub enum Subscription {
     },
     #[serde(rename = "pane.scroll_changed")]
     PaneScrollChanged { pane_id: String },
+    /// Sampled on the subscription cadence: at most one event per poll, carrying
+    /// the latest content revision after one or more screen changes.
+    #[serde(rename = "pane.output_changed")]
+    PaneOutputChanged {
+        pane_id: String,
+        /// Attach a `pane.read` of the new content to each event.
+        #[serde(default)]
+        include_text: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<ReadSource>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lines: Option<u32>,
+        #[serde(default = "super::common::default_true")]
+        strip_ansi: bool,
+    },
     #[serde(rename = "layout.updated")]
     LayoutUpdated {},
 }
@@ -372,6 +387,8 @@ pub enum SubscriptionEventKind {
     PaneAgentStatusChanged,
     #[serde(rename = "pane.scroll_changed")]
     ScrollChanged,
+    #[serde(rename = "pane.output_changed")]
+    PaneOutputChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -386,6 +403,8 @@ pub enum SubscriptionEventData {
     PaneOutputMatched(PaneOutputMatchedEvent),
     PaneAgentStatusChanged(PaneAgentStatusChangedEvent),
     ScrollChanged(PaneScrollChangedEvent),
+    // Keep last: the enum is untagged and `revision` is unique to this payload.
+    PaneOutputChanged(PaneOutputChangedEvent),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -408,6 +427,16 @@ pub struct PaneAgentStatusChangedEvent {
     pub display_agent: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub state_labels: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PaneOutputChangedEvent {
+    pub pane_id: String,
+    pub workspace_id: String,
+    /// Opaque, increasing content revision (compare with `pane.read`'s `revision`).
+    pub revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read: Option<PaneReadResult>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

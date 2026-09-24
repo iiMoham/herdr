@@ -401,6 +401,14 @@ herdr pane wait-output <pane_id> (--match <text> | --regex <pattern>) [--source 
 
 Use `pane wait-output` for normal commands and servers. Use `agent wait` for coding agents.
 
+Stream every change instead of waiting for one match:
+
+```bash
+herdr pane watch <pane_id> [--text] [--source visible|recent|recent-unwrapped] [--lines N] [--raw]
+```
+
+`pane watch` prints one JSON line per content change, at most every 100 ms: `pane_id`, `workspace_id`, and an opaque, increasing `revision`. `--text` adds a `read` of the new content, shaped like `pane read --format text` output. It runs until interrupted, the reader closes (for example `| head -5`), or the server stops; it keeps running quietly if the pane closes, so pair it with `pane.closed` when that matters. `pane get` reports the current value as `content_revision`, and `pane read` reports the revision of the content it returned.
+
 `pane wait-output` checks the selected snapshot immediately, including output that already exists, then polls until it matches. The default source name is `recent`; matching treats it as unwrapped recent output from the latest 80 rendered terminal rows. `--lines` changes that row limit. `--match` finds a literal substring on one line, and `--regex` uses Rust regular-expression syntax and also matches one line at a time.
 
 A timeout or `agent_prompt_stalled` does not prove the prompt was never delivered. Inspect the agent before retrying.

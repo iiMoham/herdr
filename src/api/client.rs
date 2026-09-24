@@ -120,6 +120,32 @@ impl ApiClient {
         }
     }
 
+    /// Send a streaming request such as `events.subscribe` and pass each
+    /// newline-delimited JSON value to `on_value`, starting with the request's own
+    /// response. Returns when `on_value` returns `false` or the server closes the stream.
+    pub fn stream_values(
+        &self,
+        request: &Request,
+        mut on_value: impl FnMut(serde_json::Value) -> io::Result<bool>,
+    ) -> Result<(), ApiClientError> {
+        let mut stream = self.connect()?;
+        write_request(&mut stream, request)?;
+        let mut reader = BufReader::new(stream);
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line)? == 0 {
+                return Ok(());
+            }
+            if line.trim().is_empty() {
+                continue;
+            }
+            let value = serde_json::from_str(&line).map_err(ApiClientError::Json)?;
+            if !on_value(value)? {
+                return Ok(());
+            }
+        }
+    }
+
     fn connect(&self) -> io::Result<LocalStream> {
         crate::ipc::connect_local_stream(&self.socket_path())
     }

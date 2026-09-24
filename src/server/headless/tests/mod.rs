@@ -2,6 +2,8 @@ use super::*;
 
 #[path = "input_sync.rs"]
 mod input_sync_tests;
+#[path = "output_stream.rs"]
+mod output_stream_tests;
 #[path = "pane_graphics.rs"]
 mod pane_graphics_tests;
 #[path = "pane_move.rs"]

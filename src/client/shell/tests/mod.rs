@@ -201,6 +201,7 @@ fn pane_scroll_result(
                 viewport_rows,
             }),
             revision: 0,
+            content_revision: None,
         },
     }
 }
