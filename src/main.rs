@@ -317,6 +317,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Desktop tab row placement: "top" or "bottom".
 # tab_bar_position = "top"
 
+# Blank rows between the desktop tab row and the panes (0-2). With the tab
+# row at the bottom, the padding sits above it. Ignored while the tab row is hidden.
+# tab_bar_padding = 0
+
 # Ordered status entries at the right edge of the desktop tab bar.
 # Supported types: zoom, hostname, datetime, text, and command.
 # Hostname, datetime, and command entries resolve on the Herdr server.
