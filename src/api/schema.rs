@@ -101,6 +101,10 @@ pub enum Method {
     WorktreeOpen(WorktreeOpenParams),
     #[serde(rename = "worktree.remove")]
     WorktreeRemove(WorktreeRemoveParams),
+    #[serde(rename = "worktree.removal_check")]
+    WorktreeRemovalCheck(WorktreeRemovalCheckParams),
+    #[serde(rename = "worktree.remove_discarding_nested")]
+    WorktreeRemoveDiscardingNested(WorktreeRemoveDiscardingNestedParams),
     #[serde(rename = "tab.create")]
     TabCreate(TabCreateParams),
     #[serde(rename = "tab.list")]

@@ -508,6 +508,10 @@ pub(super) struct ClientWorktreeRemoveOverlay {
     pub(super) error: Option<String>,
     pub(super) removing: bool,
     pub(super) force_confirmation: bool,
+    /// Nested repositories the server reported at risk; while set, confirming
+    /// discards exactly these through `worktree.remove_discarding_nested`.
+    pub(super) nested: Option<Vec<crate::api::schema::NestedRepositoryRiskInfo>>,
+    pub(super) nested_check_complete: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -641,6 +645,7 @@ pub(super) enum PendingEndpointKind {
     },
     WorktreeCreate,
     WorktreeOpen,
+    WorktreeRemovalCheck,
     WorktreeRemove {
         forced: bool,
     },

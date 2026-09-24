@@ -19,7 +19,7 @@ use super::server::ServerCapabilities;
 use super::session::SessionSnapshot;
 use super::tabs::TabInfo;
 use super::workspaces::WorkspaceInfo;
-use super::worktrees::{WorktreeInfo, WorktreeSourceInfo};
+use super::worktrees::{WorktreeInfo, WorktreeRemovalCheckResult, WorktreeSourceInfo};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct SuccessResponse {
@@ -83,6 +83,9 @@ pub enum ResponseResult {
         workspace_id: String,
         path: String,
         forced: bool,
+    },
+    WorktreeRemovalCheck {
+        check: WorktreeRemovalCheckResult,
     },
     TabInfo {
         tab: TabInfo,

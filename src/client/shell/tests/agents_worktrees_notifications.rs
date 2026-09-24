@@ -1462,3 +1462,157 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
     assert!(state.visible_notification.is_none());
     assert_eq!(state.pending_notifications.len(), 1);
 }
+
+/// Open the delete-worktree dialog for `ws_1` and confirm it once.
+fn submit_worktree_remove_dialog(state: &mut ClientShellState) -> ClientShellInput {
+    let mut prepare = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::RemoveWorktree),
+        &mut prepare,
+    );
+    let [ClientShellAction::Endpoint { request, .. }] = &prepare.actions[..] else {
+        panic!("remove worktree should prepare through worktree.list");
+    };
+    let request_id = request.id.clone();
+    state.handle_endpoint_result(
+        "boot-1",
+        &request_id,
+        Ok(worktree_list_result(Some("ws_1"))),
+    );
+    state.handle_input_bytes(b"\r")
+}
+
+fn linked_worktree_state() -> ClientShellState {
+    let mut snapshot = snapshot();
+    snapshot.workspaces[0].worktree = Some(ClientShellWorktree {
+        key: "repo-key".into(),
+        label: "repo".into(),
+        is_linked_worktree: true,
+    });
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot));
+    state.set_pane_surface(surface());
+    state
+}
+
+fn only_request(actions: &[ClientShellAction]) -> (String, crate::api::schema::Method) {
+    let [ClientShellAction::Endpoint { request, .. }] = actions else {
+        panic!("expected one endpoint request, got {actions:?}");
+    };
+    (request.id.clone(), request.method.clone())
+}
+
+fn frame_text(state: &mut ClientShellState) -> String {
+    frame_rows(&state.compose(106, 30).expect("frame")).join("\n")
+}
+
+#[test]
+fn worktree_remove_names_nested_work_and_discards_only_what_was_shown() {
+    use crate::api::schema::{
+        Method, NestedRepositoryKind, NestedRepositoryRiskInfo, ResponseResult,
+        WorktreeRemovalCheckResult,
+    };
+
+    let mut state = linked_worktree_state();
+    let submitted = submit_worktree_remove_dialog(&mut state);
+    let (request_id, method) = only_request(&submitted.actions);
+    assert!(matches!(method, Method::WorktreeRemove(ref params) if !params.force));
+
+    let (_, actions) = state.handle_endpoint_result(
+        "boot-1",
+        &request_id,
+        Err(ClientShellEndpointError {
+            code: Some("worktree_nested_repositories_at_risk".into()),
+            message: "refusing to remove /repo-feature".into(),
+        }),
+    );
+    let (check_id, method) = only_request(&actions);
+    assert!(matches!(
+        method,
+        Method::WorktreeRemovalCheck(ref params) if params.workspace_id == "ws_1"
+    ));
+
+    let frontend = NestedRepositoryRiskInfo {
+        path: "/repo-feature/frontend".into(),
+        relative_path: "frontend".into(),
+        kind: NestedRepositoryKind::Clone,
+        summary: "1 unpushed commit, 1 untracked path".into(),
+        modified: 0,
+        untracked: 1,
+        stashes: 0,
+        unpushed_commits: 1,
+        inspection_error: None,
+    };
+    state.handle_endpoint_result(
+        "boot-1",
+        &check_id,
+        Ok(ResponseResult::WorktreeRemovalCheck {
+            check: WorktreeRemovalCheckResult {
+                workspace_id: "ws_1".into(),
+                checkout_path: "/repo-feature".into(),
+                complete: true,
+                nested: vec![frontend],
+            },
+        }),
+    );
+    let text = frame_text(&mut state);
+    assert!(
+        text.contains("frontend: 1 unpushed commit, 1 untracked path"),
+        "{text}"
+    );
+    assert!(text.contains("discard nested work"), "{text}");
+
+    let discard = state.handle_input_bytes(b"\r");
+    let (discard_id, method) = only_request(&discard.actions);
+    let Method::WorktreeRemoveDiscardingNested(params) = method else {
+        panic!("expected a discarding removal, got {method:?}");
+    };
+    assert_eq!(
+        params.nested_paths,
+        vec!["/repo-feature/frontend".to_string()]
+    );
+    assert!(!params.force);
+
+    // A dirty hub checkout still needs the existing force confirmation.
+    state.handle_endpoint_result(
+        "boot-1",
+        &discard_id,
+        Err(ClientShellEndpointError {
+            code: Some("dirty_worktree_requires_force".into()),
+            message: "dirty".into(),
+        }),
+    );
+    let forced = state.handle_input_bytes(b"\r");
+    let (_, method) = only_request(&forced.actions);
+    assert!(matches!(
+        method,
+        Method::WorktreeRemoveDiscardingNested(ref params)
+            if params.force && params.nested_paths == ["/repo-feature/frontend"]
+    ));
+}
+
+#[test]
+fn worktree_remove_shows_the_refusal_when_the_server_cannot_check() {
+    let mut state = linked_worktree_state();
+    state.set_endpoint_methods(Some(vec!["worktree.list".into(), "worktree.remove".into()]));
+    let submitted = submit_worktree_remove_dialog(&mut state);
+    let (request_id, _) = only_request(&submitted.actions);
+    let (_, actions) = state.handle_endpoint_result(
+        "boot-1",
+        &request_id,
+        Err(ClientShellEndpointError {
+            code: Some("worktree_nested_repositories_at_risk".into()),
+            message: "refusing to remove: frontend has work".into(),
+        }),
+    );
+    assert!(actions.is_empty());
+    let Some(ClientShellOverlay::WorktreeRemove(remove)) = &state.overlay else {
+        panic!("the dialog stays open");
+    };
+    assert!(!remove.removing);
+    assert!(remove.nested.is_none());
+    assert_eq!(
+        remove.error.as_deref(),
+        Some("refusing to remove: frontend has work")
+    );
+}

@@ -2485,6 +2485,7 @@ mod tests {
                 respond_to,
             }),
             result: Err("simulated remove failure".into()),
+            refusal_code: None,
         });
         assert!(pane_updates.is_empty());
 
@@ -2572,6 +2573,7 @@ mod tests {
                 respond_to,
             }),
             result: Ok(()),
+            refusal_code: None,
         });
 
         let response = response_rx
@@ -2642,6 +2644,7 @@ mod tests {
                 respond_to,
             }),
             result: Ok(()),
+            refusal_code: None,
         });
 
         let response = response_rx
@@ -2671,5 +2674,201 @@ mod tests {
             app.state.terminals[&child_terminal_id].cwd,
             PathBuf::from("/repo/other")
         );
+    }
+
+    /// Hub repository that ignores `frontend/`, with a linked task worktree registered
+    /// as a Herdr child workspace. Returns (app, repo, checkout, child workspace id).
+    fn hub_with_task_worktree(name: &str) -> (App, PathBuf, PathBuf, String) {
+        let repo = create_committed_repo(&format!("{name}-hub"));
+        std::fs::write(repo.join(".gitignore"), "frontend/\nbackend/\n").unwrap();
+        run_git(&repo, &["add", ".gitignore"]);
+        run_git(&repo, &["commit", "--quiet", "-m", "ignore sub-repos"]);
+        let checkout = unique_temp_path(&format!("{name}-task"));
+        run_git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                "-b",
+                "worktree/task",
+                checkout.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        let mut app = app_with_parent(&repo);
+        let mut child = Workspace::test_new("task");
+        child.identity_cwd = checkout.clone();
+        child.worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
+            key: crate::workspace::git_space_metadata(&repo).unwrap().key,
+            label: name.into(),
+            repo_root: repo.clone(),
+            checkout_path: checkout.clone(),
+            is_linked_worktree: true,
+        });
+        let child_id = child.id.clone();
+        app.state.workspaces.push(child);
+        app.state.ensure_test_terminals();
+        (app, repo, checkout, child_id)
+    }
+
+    /// A sub-repo with a commit that exists nowhere else and an unsaved file.
+    fn nested_repo_with_local_work(path: &Path) {
+        std::fs::create_dir_all(path).unwrap();
+        run_git(path, &["init", "--quiet"]);
+        run_git(path, &["config", "user.email", "herdr@example.invalid"]);
+        run_git(path, &["config", "user.name", "Herdr Test"]);
+        std::fs::write(path.join("work.txt"), "work\n").unwrap();
+        run_git(path, &["add", "work.txt"]);
+        run_git(path, &["commit", "--quiet", "-m", "local only"]);
+        std::fs::write(path.join("unsaved.txt"), "unsaved\n").unwrap();
+    }
+
+    fn remove_request(workspace_id: &str, force: bool) -> Request {
+        Request {
+            id: "req".into(),
+            method: crate::api::schema::Method::WorktreeRemove(WorktreeRemoveParams {
+                workspace_id: workspace_id.into(),
+                force,
+                trust_repository: false,
+            }),
+        }
+    }
+
+    fn discard_request(workspace_id: &str, nested_paths: &[&Path]) -> Request {
+        Request {
+            id: "req".into(),
+            method: crate::api::schema::Method::WorktreeRemoveDiscardingNested(
+                crate::api::schema::WorktreeRemoveDiscardingNestedParams {
+                    workspace_id: workspace_id.into(),
+                    force: false,
+                    trust_repository: false,
+                    nested_paths: nested_paths
+                        .iter()
+                        .map(|path| path.display().to_string())
+                        .collect(),
+                },
+            ),
+        }
+    }
+
+    #[test]
+    fn worktree_remove_refuses_ignored_nested_repository_with_local_work_even_when_forced() {
+        let (mut app, repo, checkout, child_id) = hub_with_task_worktree("nested-refuse");
+        let frontend = checkout.join("frontend");
+        nested_repo_with_local_work(&frontend);
+
+        for force in [false, true] {
+            let response = run_deferred_api_request(&mut app, remove_request(&child_id, force));
+            let error: ErrorResponse = serde_json::from_str(&response)
+                .unwrap_or_else(|_| panic!("expected a refusal, got {response}"));
+            assert_eq!(error.error.code, "worktree_nested_repositories_at_risk");
+            assert!(
+                error
+                    .error
+                    .message
+                    .contains("frontend: 1 unpushed commit, 1 untracked path"),
+                "{}",
+                error.error.message
+            );
+            assert!(frontend.join("work.txt").exists(), "nothing may be deleted");
+            assert_eq!(app.state.workspaces.len(), 2);
+        }
+
+        let response = run_deferred_api_request(
+            &mut app,
+            Request {
+                id: "req".into(),
+                method: crate::api::schema::Method::WorktreeRemovalCheck(
+                    crate::api::schema::WorktreeRemovalCheckParams {
+                        workspace_id: child_id.clone(),
+                        trust_repository: false,
+                    },
+                ),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::WorktreeRemovalCheck { check } = success.result else {
+            panic!("expected a removal check, got {response}");
+        };
+        assert!(check.complete);
+        assert_eq!(check.nested.len(), 1);
+        assert_eq!(check.nested[0].relative_path, "frontend");
+        assert_eq!(check.nested[0].unpushed_commits, 1);
+        assert!(checkout.exists(), "a check never removes anything");
+
+        let response = run_deferred_api_request(&mut app, discard_request(&child_id, &[&frontend]));
+        let success: SuccessResponse = serde_json::from_str(&response)
+            .unwrap_or_else(|_| panic!("expected removal, got {response}"));
+        assert!(matches!(
+            success.result,
+            ResponseResult::WorktreeRemoved { .. }
+        ));
+        assert!(!checkout.exists());
+        assert_eq!(app.state.workspaces.len(), 1);
+        let _ = std::fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn discarding_removal_refuses_nested_work_that_was_not_acknowledged() {
+        let (mut app, repo, checkout, child_id) = hub_with_task_worktree("nested-ack");
+        let frontend = checkout.join("frontend");
+        let backend = checkout.join("backend");
+        nested_repo_with_local_work(&frontend);
+        nested_repo_with_local_work(&backend);
+
+        let response = run_deferred_api_request(&mut app, discard_request(&child_id, &[&frontend]));
+        let error: ErrorResponse = serde_json::from_str(&response).unwrap();
+        assert_eq!(error.error.code, "worktree_nested_repositories_at_risk");
+        assert!(
+            error.error.message.contains("backend:"),
+            "{}",
+            error.error.message
+        );
+        assert!(
+            !error.error.message.contains("frontend:"),
+            "{}",
+            error.error.message
+        );
+        assert!(backend.join("work.txt").exists() && frontend.join("work.txt").exists());
+
+        run_git(
+            &repo,
+            &["worktree", "remove", "--force", checkout.to_str().unwrap()],
+        );
+        let _ = std::fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn worktree_remove_proceeds_when_nested_repositories_are_fully_pushed() {
+        let (mut app, repo, checkout, child_id) = hub_with_task_worktree("nested-clean");
+        let remote = unique_temp_path("nested-clean-remote");
+        run_git(
+            &repo,
+            &["init", "--quiet", "--bare", remote.to_str().unwrap()],
+        );
+        let frontend = checkout.join("frontend");
+        nested_repo_with_local_work(&frontend);
+        std::fs::remove_file(frontend.join("unsaved.txt")).unwrap();
+        run_git(
+            &frontend,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        run_git(
+            &frontend,
+            &["push", "--quiet", "origin", "HEAD:refs/heads/main"],
+        );
+        run_git(&frontend, &["fetch", "--quiet", "origin"]);
+
+        let response = run_deferred_api_request(&mut app, remove_request(&child_id, false));
+        let success: SuccessResponse = serde_json::from_str(&response)
+            .unwrap_or_else(|_| panic!("clean nested repositories must not block: {response}"));
+        assert!(matches!(
+            success.result,
+            ResponseResult::WorktreeRemoved { .. }
+        ));
+        assert!(!checkout.exists());
+        let _ = std::fs::remove_dir_all(repo);
+        let _ = std::fs::remove_dir_all(remote);
     }
 }

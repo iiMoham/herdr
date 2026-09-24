@@ -239,6 +239,7 @@ impl HeadlessServer {
                 | Method::WorktreeCreate(_)
                 | Method::WorktreeOpen(_)
                 | Method::WorktreeRemove(_)
+                | Method::WorktreeRemoveDiscardingNested(_)
         )
     }
 
@@ -280,6 +281,7 @@ impl HeadlessServer {
                 | Method::WorktreeCreate(_)
                 | Method::WorktreeOpen(_)
                 | Method::WorktreeRemove(_)
+                | Method::WorktreeRemoveDiscardingNested(_)
         )
     }
 
@@ -308,6 +310,7 @@ impl HeadlessServer {
                 | Method::WorktreeCreate(_)
                 | Method::WorktreeOpen(_)
                 | Method::WorktreeRemove(_)
+                | Method::WorktreeRemoveDiscardingNested(_)
         )
     }
 

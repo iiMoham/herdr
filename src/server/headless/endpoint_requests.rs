@@ -107,6 +107,7 @@ impl HeadlessServer {
                 &request.method,
                 api::schema::Method::WorktreeCreate(_)
                     | api::schema::Method::WorktreeRemove(_)
+                    | api::schema::Method::WorktreeRemoveDiscardingNested(_)
                     | api::schema::Method::WorktreeList(_)
                     | api::schema::Method::WorktreeOpen(_)
             );

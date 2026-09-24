@@ -49,6 +49,8 @@ pub struct WorktreeRemoveResult {
     pub worktree: Option<Box<crate::api::schema::WorktreeInfo>>,
     pub forced: bool,
     pub api_request: Option<ApiWorktreeRemoveRequest>,
+    /// Set when the pre-removal safety check refused before Git ran.
+    pub refusal_code: Option<&'static str>,
     pub result: Result<(), String>,
 }
 

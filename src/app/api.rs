@@ -1063,6 +1063,13 @@ impl App {
                     "worktree.create is handled asynchronously by the app runtime",
                 );
             }
+            Method::WorktreeRemovalCheck(_) | Method::WorktreeRemoveDiscardingNested(_) => {
+                return responses::encode_error(
+                    request.id,
+                    "invalid_request",
+                    "worktree removal checks are handled asynchronously by the app runtime",
+                );
+            }
             Method::WorktreeRemove(params) => {
                 let _ = params;
                 return responses::encode_error(

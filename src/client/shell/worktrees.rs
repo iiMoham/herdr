@@ -347,14 +347,27 @@ impl ClientShellState {
         }
         let workspace_id = remove.workspace_id.clone();
         let forced = remove.force_confirmation;
+        let method = match &remove.nested {
+            Some(nested) => crate::api::schema::Method::WorktreeRemoveDiscardingNested(
+                crate::api::schema::WorktreeRemoveDiscardingNestedParams {
+                    workspace_id,
+                    force: forced,
+                    trust_repository: false,
+                    nested_paths: nested.iter().map(|risk| risk.path.clone()).collect(),
+                },
+            ),
+            None => crate::api::schema::Method::WorktreeRemove(
+                crate::api::schema::WorktreeRemoveParams {
+                    workspace_id,
+                    force: forced,
+                    trust_repository: false,
+                },
+            ),
+        };
         remove.removing = true;
         remove.error = None;
         if !self.push_endpoint_method_with_kind(
-            crate::api::schema::Method::WorktreeRemove(crate::api::schema::WorktreeRemoveParams {
-                workspace_id,
-                force: forced,
-                trust_repository: false,
-            }),
+            method,
             PendingEndpointKind::WorktreeRemove { forced },
             outcome,
         ) {
@@ -363,6 +376,34 @@ impl ClientShellState {
             }
         }
         outcome.repaint = true;
+    }
+
+    /// The server refused removal because nested repositories would lose work:
+    /// fetch the details so the dialog can name them before offering to discard.
+    fn request_worktree_removal_check(&mut self, refusal: String, outcome: &mut ClientShellInput) {
+        let Some(ClientShellOverlay::WorktreeRemove(remove)) = self.overlay.as_mut() else {
+            return;
+        };
+        let workspace_id = remove.workspace_id.clone();
+        let method = crate::api::schema::Method::WorktreeRemovalCheck(
+            crate::api::schema::WorktreeRemovalCheckParams {
+                workspace_id,
+                trust_repository: false,
+            },
+        );
+        if self.supports_endpoint_method(&method)
+            && self.push_endpoint_method_with_kind(
+                method,
+                PendingEndpointKind::WorktreeRemovalCheck,
+                outcome,
+            )
+        {
+            return;
+        }
+        if let Some(ClientShellOverlay::WorktreeRemove(remove)) = self.overlay.as_mut() {
+            remove.removing = false;
+            remove.error = Some(refusal);
+        }
     }
 
     pub(super) fn handle_worktree_endpoint_result(
@@ -452,6 +493,8 @@ impl ClientShellState {
                             error: None,
                             removing: false,
                             force_confirmation: false,
+                            nested: None,
+                            nested_check_complete: true,
                         },
                     ));
                 } else {
@@ -505,6 +548,42 @@ impl ClientShellState {
                     remove.removing = false;
                     remove.force_confirmation = true;
                     remove.error = None;
+                }
+                true
+            }
+            (PendingEndpointKind::WorktreeRemove { .. }, Err(error))
+                if matches!(
+                    error.code.as_deref(),
+                    Some(
+                        "worktree_nested_repositories_at_risk"
+                            | "worktree_removal_check_incomplete"
+                    )
+                ) =>
+            {
+                self.request_worktree_removal_check(error.message, outcome);
+                true
+            }
+            (
+                PendingEndpointKind::WorktreeRemovalCheck,
+                Ok(ResponseResult::WorktreeRemovalCheck { check }),
+            ) => {
+                if let Some(ClientShellOverlay::WorktreeRemove(remove)) = self.overlay.as_mut() {
+                    remove.removing = false;
+                    remove.error = None;
+                    remove.nested_check_complete = check.complete;
+                    // Nothing left at risk (the work was saved meanwhile): plain removal again.
+                    remove.nested =
+                        (!check.nested.is_empty() || !check.complete).then_some(check.nested);
+                }
+                true
+            }
+            (PendingEndpointKind::WorktreeRemovalCheck, result) => {
+                if let Some(ClientShellOverlay::WorktreeRemove(remove)) = self.overlay.as_mut() {
+                    remove.removing = false;
+                    remove.error = Some(match result {
+                        Err(error) => error.message,
+                        Ok(_) => "unexpected removal check result".to_owned(),
+                    });
                 }
                 true
             }
