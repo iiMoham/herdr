@@ -100,7 +100,20 @@ pub(crate) fn render_tab_bar(
             break;
         }
         let rect = Rect::new(x, area.y, width, 1);
-        let style = if tab.focused {
+        // Synced tabs use the warning color so a live broadcast is never easy to miss.
+        let style = if tab.input_sync {
+            if tab.focused {
+                Style::default()
+                    .fg(panel_contrast_fg(palette))
+                    .bg(palette.peach)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+                    .fg(palette.peach)
+                    .bg(palette.surface0)
+                    .add_modifier(Modifier::BOLD)
+            }
+        } else if tab.focused {
             let base = Style::default()
                 .fg(panel_contrast_fg(palette))
                 .bg(palette.accent);
@@ -372,11 +385,14 @@ fn max_tab_scroll(widths: &[u16], available: u16) -> usize {
 }
 
 fn tab_label(tab: &ClientShellTab) -> String {
+    let mut label = tab.label.clone();
     if tab.zoomed {
-        format!("{} Z", tab.label)
-    } else {
-        tab.label.clone()
+        label.push_str(" Z");
     }
+    if tab.input_sync {
+        label.push_str(" S");
+    }
+    label
 }
 
 #[cfg(test)]

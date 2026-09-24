@@ -525,6 +525,7 @@ pub(super) enum ClientContextMenuAction {
     SplitRight,
     SplitDown,
     Zoom,
+    ToggleInputSync,
     ToggleRightClickPassthrough,
     ClosePane,
 }
@@ -541,6 +542,8 @@ pub(super) enum ClientContextMenuTarget {
     Tab {
         tab_id: String,
         workspace_id: String,
+        /// Current input sync state, or `None` when the server cannot toggle it.
+        input_sync: Option<bool>,
     },
     Pane {
         pane_id: String,
@@ -1396,6 +1399,7 @@ impl ClientShellState {
                             || left.workspace_id != right.workspace_id
                             || left.label != right.label
                             || left.zoomed != right.zoomed
+                            || left.input_sync != right.input_sync
                     })
                 || render::tab_bar_status_width(current) != render::tab_bar_status_width(&snapshot)
         });

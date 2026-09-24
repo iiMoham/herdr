@@ -2513,6 +2513,32 @@ impl HeadlessServer {
                 if let Err(err) = apply_client_pane_input_events(runtime, &events) {
                     warn!(client_id, pane_id, err = %err, "targeted client shell input failed");
                 }
+                let siblings = self
+                    .app
+                    .state
+                    .input_sync_siblings(workspace_index, runtime_pane_id);
+                if !siblings.is_empty() {
+                    let broadcast = super::pane_input::input_sync_broadcast_events(&events);
+                    if !broadcast.is_empty() {
+                        for sibling in siblings {
+                            let Some(sibling_runtime) =
+                                self.app.state.runtime_for_pane_in_workspace(
+                                    &self.app.terminal_runtimes,
+                                    workspace_index,
+                                    sibling,
+                                )
+                            else {
+                                continue;
+                            };
+                            // One exited or blocked sibling must not stop delivery to the rest.
+                            if let Err(err) =
+                                apply_client_pane_input_events(sibling_runtime, &broadcast)
+                            {
+                                debug!(client_id, pane_id, err = %err, "synced sibling input failed");
+                            }
+                        }
+                    }
+                }
                 foreground_changed | geometry_changed || runtime.scroll_metrics() != scroll_before
             }
             ServerEvent::ClientShellPopupInput {

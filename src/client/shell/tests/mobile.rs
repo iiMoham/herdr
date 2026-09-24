@@ -358,6 +358,7 @@ fn mobile_background_workspace_uses_its_own_active_tab_status() {
         zoomed: false,
         focused: false,
         agent_status: AgentStatus::Idle,
+        input_sync: false,
     });
     projected.workspaces.push(ClientShellWorkspace {
         workspace_id: "ws_2".into(),
@@ -383,6 +384,7 @@ fn mobile_background_workspace_uses_its_own_active_tab_status() {
             zoomed: false,
             focused: false,
             agent_status: AgentStatus::Idle,
+            input_sync: false,
         });
     }
     state.set_snapshot(Box::new(projected));

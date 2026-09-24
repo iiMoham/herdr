@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use crate::api::schema::{
-    EventData, EventEnvelope, EventKind, ResponseResult, TabCreateParams, TabListParams,
-    TabMoveParams, TabRenameParams, TabTarget,
+    EventData, EventEnvelope, EventKind, ResponseResult, TabCreateParams, TabInputSyncMode,
+    TabListParams, TabMoveParams, TabRenameParams, TabSetInputSyncParams, TabTarget,
 };
 use crate::app::{App, Mode};
 
@@ -167,6 +167,34 @@ impl App {
             },
         });
         let tab = self.tab_info(ws_idx, tab_idx).unwrap();
+
+        encode_success(id, ResponseResult::TabInfo { tab })
+    }
+
+    pub(super) fn handle_tab_set_input_sync(
+        &mut self,
+        id: String,
+        params: TabSetInputSyncParams,
+    ) -> String {
+        let Some((ws_idx, tab_idx)) = self.parse_tab_id(&params.tab_id) else {
+            return tab_not_found(id, &params.tab_id);
+        };
+        let Some(tab) = self
+            .state
+            .workspaces
+            .get_mut(ws_idx)
+            .and_then(|ws| ws.tabs.get_mut(tab_idx))
+        else {
+            return tab_not_found(id, &params.tab_id);
+        };
+        tab.input_sync = match params.mode {
+            TabInputSyncMode::On => true,
+            TabInputSyncMode::Off => false,
+            TabInputSyncMode::Toggle => !tab.input_sync,
+        };
+        let Some(tab) = self.tab_info(ws_idx, tab_idx) else {
+            return tab_not_found(id, &params.tab_id);
+        };
 
         encode_success(id, ResponseResult::TabInfo { tab })
     }

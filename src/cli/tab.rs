@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::api::schema::{TabCreateParams, TabListParams, TabRenameParams};
+use crate::api::schema::{
+    TabCreateParams, TabInputSyncMode, TabListParams, TabRenameParams, TabSetInputSyncParams,
+};
 
 pub(super) fn run_tab_command(args: &[String]) -> std::io::Result<i32> {
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
@@ -15,6 +17,7 @@ pub(super) fn run_tab_command(args: &[String]) -> std::io::Result<i32> {
         "focus" => tab_focus(&args[1..]),
         "rename" => tab_rename(&args[1..]),
         "close" => tab_close(&args[1..]),
+        "sync" => tab_sync(&args[1..]),
         "help" | "--help" | "-h" => {
             print_tab_help();
             Ok(0)
@@ -174,6 +177,39 @@ fn tab_close(args: &[String]) -> std::io::Result<i32> {
     super::runtime::tab_close(super::normalize_tab_id(raw_tab_id))
 }
 
+const TAB_SYNC_USAGE: &str = "usage: herdr tab sync <on|off|toggle> [tab_id]";
+
+fn tab_sync(args: &[String]) -> std::io::Result<i32> {
+    let mode = match args.first().map(String::as_str) {
+        Some("on") => TabInputSyncMode::On,
+        Some("off") => TabInputSyncMode::Off,
+        Some("toggle") => TabInputSyncMode::Toggle,
+        Some(_) | None => {
+            eprintln!("{TAB_SYNC_USAGE}");
+            return Ok(2);
+        }
+    };
+    if args.len() > 2 {
+        eprintln!("{TAB_SYNC_USAGE}");
+        return Ok(2);
+    }
+    // Without an explicit id, target the tab of the pane running the command.
+    let Some(raw_tab_id) = args.get(1).cloned().or_else(|| {
+        std::env::var("HERDR_TAB_ID")
+            .ok()
+            .filter(|id| !id.is_empty())
+    }) else {
+        eprintln!("{TAB_SYNC_USAGE}");
+        eprintln!("tab_id is required outside a Herdr pane");
+        return Ok(2);
+    };
+
+    super::runtime::tab_set_input_sync(TabSetInputSyncParams {
+        tab_id: super::normalize_tab_id(&raw_tab_id),
+        mode,
+    })
+}
+
 fn print_tab_help() {
     eprintln!("herdr tab commands:");
     eprintln!("  herdr tab list [--workspace <workspace_id>]");
@@ -184,4 +220,5 @@ fn print_tab_help() {
     eprintln!("  herdr tab focus <tab_id>");
     eprintln!("  herdr tab rename <tab_id> <label>");
     eprintln!("  herdr tab close <tab_id>");
+    eprintln!("  herdr tab sync <on|off|toggle> [tab_id]");
 }

@@ -294,6 +294,12 @@ fn tab_command() -> Command {
                 .arg(required("label", "LABEL").num_args(1..)),
         )
         .subcommand(id_command("close", "tab_id", "Close a tab"))
+        .subcommand(
+            Command::new("sync")
+                .about("Broadcast typing in a tab to all of its panes")
+                .arg(required("mode", "MODE").value_parser(["on", "off", "toggle"]))
+                .arg(Arg::new("tab_id").value_name("TAB_ID")),
+        )
 }
 
 fn notification_command() -> Command {
@@ -1180,6 +1186,24 @@ mod tests {
             error.kind(),
             clap::error::ErrorKind::MissingRequiredArgument
         );
+    }
+
+    #[test]
+    fn tab_sync_accepts_a_mode_and_optional_tab() {
+        for valid in [
+            &["herdr", "tab", "sync", "on"][..],
+            &["herdr", "tab", "sync", "off", "w1:t2"][..],
+            &["herdr", "tab", "sync", "toggle", "w1:t1"][..],
+        ] {
+            assert!(super::command().try_get_matches_from(valid).is_ok());
+        }
+        for invalid in [
+            &["herdr", "tab", "sync"][..],
+            &["herdr", "tab", "sync", "maybe"][..],
+            &["herdr", "tab", "sync", "on", "w1:t1", "extra"][..],
+        ] {
+            assert!(super::command().try_get_matches_from(invalid).is_err());
+        }
     }
 
     #[test]

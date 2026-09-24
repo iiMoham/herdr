@@ -50,6 +50,7 @@ pub(super) fn snapshot() -> ClientShellSnapshot {
             zoomed: false,
             focused: true,
             agent_status: AgentStatus::Idle,
+            input_sync: false,
         }],
         panes: vec![ClientShellPane {
             pane_id: "pane_1".into(),
@@ -254,6 +255,7 @@ mod endpoints;
 mod graphics;
 #[path = "input.rs"]
 mod input_domain;
+mod input_sync;
 mod keybindings_settings;
 mod link_hover;
 mod mobile;

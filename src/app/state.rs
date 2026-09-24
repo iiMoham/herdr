@@ -929,6 +929,32 @@ impl AppState {
         }
     }
 
+    /// Other panes in `pane_id`'s tab that should receive its interactive input,
+    /// or an empty list when that tab does not have input sync enabled.
+    pub(crate) fn input_sync_siblings(
+        &self,
+        ws_idx: usize,
+        pane_id: crate::layout::PaneId,
+    ) -> Vec<crate::layout::PaneId> {
+        let Some(ws) = self.workspaces.get(ws_idx) else {
+            return Vec::new();
+        };
+        let Some(tab) = ws
+            .find_tab_index_for_pane(pane_id)
+            .and_then(|tab_idx| ws.tabs.get(tab_idx))
+        else {
+            return Vec::new();
+        };
+        if !tab.input_sync {
+            return Vec::new();
+        }
+        tab.layout
+            .pane_ids()
+            .into_iter()
+            .filter(|sibling| *sibling != pane_id)
+            .collect()
+    }
+
     /// Returns true when the given (workspace, tab, pane) refers to the
     /// currently focused pane in the active workspace's active tab.
     pub(crate) fn runtime_for_pane_in_workspace<'a>(
@@ -1500,5 +1526,45 @@ mod tests {
             KeyCode::Char('b'),
             KeyModifiers::SHIFT,
         ));
+    }
+
+    #[test]
+    fn input_sync_siblings_follow_the_tab_flag_and_are_never_persisted() {
+        use ratatui::layout::Direction;
+
+        let mut state = AppState::test_new();
+        let mut workspace = crate::workspace::Workspace::test_new("sync");
+        let second = workspace.test_split(Direction::Horizontal);
+        let third = workspace.test_split(Direction::Vertical);
+        workspace.test_add_tab(Some("other"));
+        workspace.switch_tab(0);
+        state.workspaces = vec![workspace];
+        state.ensure_test_terminals();
+        let root = state.workspaces[0].tabs[0].root_pane;
+        let other_root = state.workspaces[0].tabs[1].root_pane;
+
+        assert!(state.input_sync_siblings(0, root).is_empty());
+
+        state.workspaces[0].tabs[0].input_sync = true;
+        let mut siblings = state.input_sync_siblings(0, root);
+        siblings.sort_by_key(|pane| pane.raw());
+        let mut expected = vec![second, third];
+        expected.sort_by_key(|pane| pane.raw());
+        assert_eq!(siblings, expected);
+        assert!(state.input_sync_siblings(0, other_root).is_empty());
+        assert!(state.input_sync_siblings(9, root).is_empty());
+
+        let snapshot = crate::persist::capture(
+            &state.workspaces,
+            &state.terminals,
+            &crate::terminal::TerminalRuntimeRegistry::default(),
+            Some(0),
+            0,
+        );
+        let saved = serde_json::to_string(&snapshot).unwrap();
+        assert!(
+            !saved.contains("input_sync"),
+            "input sync must stay runtime-only"
+        );
     }
 }

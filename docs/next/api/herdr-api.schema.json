@@ -1043,6 +1043,10 @@
             "focused": {
               "type": "boolean"
             },
+            "input_sync": {
+              "description": "Whether interactive typing in this tab is broadcast to all of its panes.",
+              "type": "boolean"
+            },
             "label": {
               "type": "string"
             },
@@ -4387,6 +4391,14 @@
           },
           "type": "object"
         },
+        "TabInputSyncMode": {
+          "enum": [
+            "on",
+            "off",
+            "toggle"
+          ],
+          "type": "string"
+        },
         "TabListParams": {
           "properties": {
             "workspace_id": {
@@ -4427,6 +4439,21 @@
           "required": [
             "tab_id",
             "label"
+          ],
+          "type": "object"
+        },
+        "TabSetInputSyncParams": {
+          "properties": {
+            "mode": {
+              "$ref": "#/schemas/request/$defs/TabInputSyncMode"
+            },
+            "tab_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tab_id",
+            "mode"
           ],
           "type": "object"
         },
@@ -5317,6 +5344,22 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/TabTarget"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "tab.set_input_sync",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/TabSetInputSyncParams"
             }
           },
           "required": [
@@ -10774,6 +10817,10 @@
               "$ref": "#/schemas/success_response/$defs/AgentStatus"
             },
             "focused": {
+              "type": "boolean"
+            },
+            "input_sync": {
+              "description": "Whether interactive typing in this tab is broadcast to all of its panes.",
               "type": "boolean"
             },
             "label": {
