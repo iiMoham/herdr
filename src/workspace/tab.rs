@@ -46,6 +46,8 @@ pub struct Tab {
     #[cfg(test)]
     pub runtimes: HashMap<PaneId, TerminalRuntime>,
     pub zoomed: bool,
+    /// Broadcast interactive client typing to every pane in this tab. Runtime-only: never persisted.
+    pub input_sync: bool,
     pub events: mpsc::Sender<AppEvent>,
     pub(crate) render_notify: Arc<Notify>,
     pub(crate) render_dirty: Arc<RenderSignal>,
@@ -188,6 +190,7 @@ impl Tab {
                 #[cfg(test)]
                 runtimes: HashMap::new(),
                 zoomed: false,
+                input_sync: false,
                 events,
                 render_notify,
                 render_dirty,
@@ -451,6 +454,7 @@ impl Tab {
             #[cfg(test)]
             runtimes: HashMap::new(),
             zoomed: false,
+            input_sync: false,
             events,
             render_notify,
             render_dirty,

@@ -516,6 +516,7 @@ pub(crate) fn api_method_name(method: &Method) -> &'static str {
         Method::TabGet(_) => "tab.get",
         Method::TabFocus(_) => "tab.focus",
         Method::TabRename(_) => "tab.rename",
+        Method::TabSetInputSync(_) => "tab.set_input_sync",
         Method::TabMove(_) => "tab.move",
         Method::TabClose(_) => "tab.close",
         Method::AgentList(_) => "agent.list",

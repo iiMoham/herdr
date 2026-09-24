@@ -1092,6 +1092,12 @@ impl ClientShellState {
                 pane_id: focused_pane,
                 mode: PaneZoomMode::Toggle,
             })),
+            KeybindAction::ToggleInputSync => Some(Method::TabSetInputSync(
+                crate::api::schema::TabSetInputSyncParams {
+                    tab_id: focused_tab?,
+                    mode: crate::api::schema::TabInputSyncMode::Toggle,
+                },
+            )),
             KeybindAction::ClearPane => Some(Method::PaneClear(PaneTarget {
                 pane_id: focused_pane?,
             })),

@@ -1058,6 +1058,10 @@ pub struct ClientShellTab {
     pub focused: bool,
     #[serde(deserialize_with = "deserialize_client_shell_agent_status")]
     pub agent_status: crate::api::schema::AgentStatus,
+    /// Additive: older servers omit it and older clients ignore it. No
+    /// `skip_serializing_if`, because the bincode snapshot roundtrip cannot skip fields.
+    #[serde(default)]
+    pub input_sync: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2728,6 +2732,7 @@ mod tests {
                 zoomed: false,
                 focused: true,
                 agent_status: crate::api::schema::AgentStatus::Idle,
+                input_sync: false,
             }],
             panes: vec![ClientShellPane {
                 pane_id: "w1:p1".into(),

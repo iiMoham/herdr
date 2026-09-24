@@ -36,6 +36,20 @@ pub struct TabMoveParams {
     pub insert_index: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TabInputSyncMode {
+    On,
+    Off,
+    Toggle,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TabSetInputSyncParams {
+    pub tab_id: String,
+    pub mode: TabInputSyncMode,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TabInfo {
     pub tab_id: String,
@@ -45,4 +59,7 @@ pub struct TabInfo {
     pub focused: bool,
     pub pane_count: usize,
     pub agent_status: AgentStatus,
+    /// Whether interactive typing in this tab is broadcast to all of its panes.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub input_sync: bool,
 }

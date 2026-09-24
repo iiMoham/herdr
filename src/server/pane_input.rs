@@ -200,6 +200,34 @@ pub(super) fn apply_terminal_attach_input(
     }
 }
 
+/// Events from a synced tab's focused pane that are also delivered to its siblings:
+/// typing and paste only. Mouse input stays with the pane under the pointer, and
+/// unmodified PageUp/PageDown stay local because the focused pane may consume them
+/// for host scrollback.
+pub(super) fn input_sync_broadcast_events(
+    events: &[ClientPaneInputEvent],
+) -> Vec<ClientPaneInputEvent> {
+    let mut broadcast = Vec::new();
+    for event in events {
+        let keep = match event {
+            ClientPaneInputEvent::Mouse { .. } => false,
+            ClientPaneInputEvent::TextCommit(_) | ClientPaneInputEvent::Paste(_) => true,
+            ClientPaneInputEvent::Key { .. } => match event.to_raw_input_event() {
+                crate::raw_input::RawInputEvent::Key(key) => {
+                    let key_event = key.as_key_event();
+                    !(matches!(key_event.code, KeyCode::PageUp | KeyCode::PageDown)
+                        && key_event.modifiers.is_empty())
+                }
+                _ => true,
+            },
+        };
+        if keep {
+            broadcast.push(event.clone());
+        }
+    }
+    broadcast
+}
+
 pub(super) fn apply_client_pane_input_events(
     runtime: &crate::terminal::TerminalRuntime,
     events: &[ClientPaneInputEvent],
@@ -348,6 +376,47 @@ fn apply_client_terminal_input_events(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn key(code: KeyCode, modifiers: KeyModifiers) -> ClientPaneInputEvent {
+        ClientPaneInputEvent::from_terminal_key(crate::input::TerminalKey::new(code, modifiers))
+            .expect("encodable key")
+    }
+
+    #[test]
+    fn input_sync_broadcasts_typing_but_not_mouse_or_host_page_keys() {
+        let mouse = ClientPaneInputEvent::Mouse {
+            kind: crate::protocol::ClientMouseKind::Down(crate::protocol::ClientMouseButton::Left),
+            position: crate::protocol::ClientMousePosition::Cell { column: 1, row: 1 },
+            geometry: None,
+            modifiers: 0,
+            lines: 0,
+        };
+        let letter = key(KeyCode::Char('a'), KeyModifiers::empty());
+        let enter = key(KeyCode::Enter, KeyModifiers::empty());
+        let shifted_page = key(KeyCode::PageUp, KeyModifiers::SHIFT);
+        let events = vec![
+            letter.clone(),
+            mouse,
+            ClientPaneInputEvent::TextCommit("text".into()),
+            key(KeyCode::PageUp, KeyModifiers::empty()),
+            key(KeyCode::PageDown, KeyModifiers::empty()),
+            ClientPaneInputEvent::Paste("paste".into()),
+            shifted_page.clone(),
+            enter.clone(),
+        ];
+
+        assert_eq!(
+            input_sync_broadcast_events(&events),
+            vec![
+                letter,
+                ClientPaneInputEvent::TextCommit("text".into()),
+                ClientPaneInputEvent::Paste("paste".into()),
+                shifted_page,
+                enter,
+            ]
+        );
+        assert!(input_sync_broadcast_events(&[]).is_empty());
+    }
 
     #[tokio::test]
     async fn terminal_attach_stale_geometry_falls_back_to_the_canonical_cell() {

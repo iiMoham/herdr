@@ -226,10 +226,15 @@ fn compact_tab_status(snapshot: &ClientShellSnapshot, workspace: &ClientShellWor
         .get(active)
         .map(|tab| tab.label.as_str())
         .unwrap_or("1");
-    if tabs.len() <= 1 {
-        format!("tab {label}")
+    let sync = if tabs.get(active).is_some_and(|tab| tab.input_sync) {
+        " · sync"
     } else {
-        format!("tab {label} · {}/{}", active + 1, tabs.len())
+        ""
+    };
+    if tabs.len() <= 1 {
+        format!("tab {label}{sync}")
+    } else {
+        format!("tab {label} · {}/{}{sync}", active + 1, tabs.len())
     }
 }
 

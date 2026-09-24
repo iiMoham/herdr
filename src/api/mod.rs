@@ -43,6 +43,7 @@ pub(crate) fn request_changes_ui(request: &Request) -> bool {
             | Method::TabRename(_)
             | Method::TabMove(_)
             | Method::TabClose(_)
+            | Method::TabSetInputSync(_)
             | Method::LayoutApply(_)
             | Method::LayoutSetSplitRatio(_)
             | Method::AgentRename(_)

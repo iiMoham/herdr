@@ -66,6 +66,12 @@ pub(super) fn tab_rename(params: TabRenameParams) -> std::io::Result<i32> {
     print_method_response("cli:tab:rename", Method::TabRename(params))
 }
 
+pub(super) fn tab_set_input_sync(
+    params: crate::api::schema::TabSetInputSyncParams,
+) -> std::io::Result<i32> {
+    print_method_response("cli:tab:sync", Method::TabSetInputSync(params))
+}
+
 pub(super) fn tab_close(tab_id: String) -> std::io::Result<i32> {
     print_method_response("cli:tab:close", Method::TabClose(TabTarget { tab_id }))
 }

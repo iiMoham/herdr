@@ -800,6 +800,12 @@
           "description": "Toggle zoom for the focused pane. The legacy key name `fullscreen` is accepted as an alias."
         },
         {
+          "key": "keys.toggle_input_sync",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Toggle input sync for the focused tab: typing and paste in one pane reach every pane in the tab. Unset by default; also available from the tab's right-click menu."
+        },
+        {
           "key": "keys.resize_mode",
           "type": "keybinding",
           "default": "\"prefix+r\"",

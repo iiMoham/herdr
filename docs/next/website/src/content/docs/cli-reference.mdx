@@ -193,11 +193,14 @@ herdr tab get <tab_id>
 herdr tab focus <tab_id>
 herdr tab rename <tab_id> <label>
 herdr tab close <tab_id>
+herdr tab sync <on|off|toggle> [tab_id]
 ```
 
 A tab is another terminal layout inside a workspace. Without `--workspace`, `tab create` uses the active workspace and fails if none exists. Its JSON response exposes `.result.tab.tab_id` and `.result.root_pane.pane_id`. Closing a workspace's last tab also closes the workspace, matching the TUI close-tab action. If `confirm_close` is enabled and closing the tab would also close a whole worktree group, `tab close` returns a `confirmation_required` error instead.
 
 With `ui.confirm_close` enabled, the TUI asks for confirmation before closing a workspace's last tab from a keybinding or the tab menu. Ordinary CLI/API tab closes remain immediate.
+
+`tab sync` turns input sync on, off, or toggles it for a tab; without `tab_id` it uses `HERDR_TAB_ID`, so it works from inside a pane. While sync is on, typing and paste sent from an attached client to any pane in the tab reach every pane in that tab, like tmux `synchronize-panes`. Each pane receives the input encoded for its own terminal modes, such as bracketed paste. Mouse input, popups, and CLI/API input (`pane send-text`, `pane send-keys`, `agent prompt`) are never broadcast. Sync is shared by every attached client, shown as an `S` next to the tab name, and resets to off when the server restarts. `tab list` and `tab get` include `"input_sync": true` for synced tabs.
 
 Workspace and tab creation, and pane splitting, leave focus unchanged by default. `--focus` selects the new layout; `--no-focus` states the default explicitly. Without `--cwd`, new terminals follow the configured `terminal.new_cwd` policy, which follows the source pane or workspace by default. Each `--env KEY=VALUE` adds or replaces that variable in the new root shell.
 

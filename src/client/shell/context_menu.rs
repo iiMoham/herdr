@@ -41,11 +41,19 @@ impl ClientContextMenuOverlay {
                     Action::ToggleGroup,
                 ),
             ],
-            ClientContextMenuTarget::Tab { .. } => vec![
-                item("New tab", Action::NewTab),
-                item("Rename", Action::Rename),
-                item("Close", Action::Close),
-            ],
+            ClientContextMenuTarget::Tab { input_sync, .. } => {
+                let mut items = vec![
+                    item("New tab", Action::NewTab),
+                    item("Rename", Action::Rename),
+                    item("Close", Action::Close),
+                ];
+                match input_sync {
+                    Some(false) => items.push(item("Sync input", Action::ToggleInputSync)),
+                    Some(true) => items.push(item("Stop syncing input", Action::ToggleInputSync)),
+                    None => {}
+                }
+                items
+            }
             ClientContextMenuTarget::Pane {
                 source_pane_id,
                 has_manual_label,
@@ -131,10 +139,19 @@ impl ClientShellState {
         else {
             return;
         };
+        let workspace_id = tab.workspace_id.clone();
+        let input_sync = tab.input_sync;
+        let can_sync = self.supports_endpoint_method(&crate::api::schema::Method::TabSetInputSync(
+            crate::api::schema::TabSetInputSyncParams {
+                tab_id: tab_id.clone(),
+                mode: crate::api::schema::TabInputSyncMode::Toggle,
+            },
+        ));
         self.overlay = Some(ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
             target: ClientContextMenuTarget::Tab {
                 tab_id,
-                workspace_id: tab.workspace_id.clone(),
+                workspace_id,
+                input_sync: can_sync.then_some(input_sync),
             },
             x,
             y,
@@ -198,6 +215,7 @@ impl ClientShellState {
             ClientContextMenuTarget::Tab {
                 tab_id,
                 workspace_id,
+                ..
             } => self.activate_tab_context_action(tab_id, workspace_id, action, outcome),
             ClientContextMenuTarget::Pane {
                 pane_id,
@@ -359,6 +377,15 @@ impl ClientShellState {
             }
             ClientContextMenuAction::Close => {
                 self.request_tab_close(tab_id, outcome);
+            }
+            ClientContextMenuAction::ToggleInputSync => {
+                self.push_endpoint_method(
+                    Method::TabSetInputSync(crate::api::schema::TabSetInputSyncParams {
+                        tab_id,
+                        mode: crate::api::schema::TabInputSyncMode::Toggle,
+                    }),
+                    outcome,
+                );
             }
             _ => {}
         }

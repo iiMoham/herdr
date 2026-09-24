@@ -1,5 +1,7 @@
 use super::*;
 
+#[path = "input_sync.rs"]
+mod input_sync_tests;
 #[path = "pane_graphics.rs"]
 mod pane_graphics_tests;
 #[path = "pane_move.rs"]
