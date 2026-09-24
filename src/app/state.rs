@@ -75,6 +75,58 @@ pub struct Palette {
 
 impl Palette {
     /// Catppuccin Mocha — the default.
+    /// Midnight neon — herdr-plus default. Tuned for a `#0b1020` navy terminal
+    /// background: cyan for focus and working, magenta for needs-you, green for
+    /// done, calm periwinkle for idle.
+    pub fn midnight_neon() -> Self {
+        Self {
+            accent: Color::Rgb(55, 226, 255), // #37e2ff cyan
+            panel_bg: Color::Rgb(11, 16, 32), // #0b1020 navy
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(22, 33, 63), // #16213f
+            selection_bg: Color::Rgb(34, 48, 92),  // #22305c
+            surface0: Color::Rgb(26, 36, 68),
+            surface1: Color::Rgb(37, 50, 87),
+            surface_dim: Color::Rgb(16, 23, 45),
+            overlay0: Color::Rgb(91, 102, 144), // #5b6690 muted
+            overlay1: Color::Rgb(118, 130, 173),
+            text: Color::Rgb(215, 222, 245), // #d7def5
+            subtext0: Color::Rgb(170, 180, 214),
+            mauve: Color::Rgb(181, 140, 255),
+            green: Color::Rgb(139, 154, 214), // idle: #8b9ad6 periwinkle
+            yellow: Color::Rgb(55, 226, 255), // working: #37e2ff cyan
+            red: Color::Rgb(255, 79, 216),    // needs you: #ff4fd8 magenta
+            blue: Color::Rgb(106, 168, 255),
+            teal: Color::Rgb(124, 242, 154), // done: #7cf29a green
+            peach: Color::Rgb(255, 184, 107),
+        }
+    }
+
+    /// Neon day — the light sibling of Midnight neon for `theme.auto_switch`.
+    pub fn neon_day() -> Self {
+        Self {
+            accent: Color::Rgb(0, 119, 182),
+            panel_bg: Color::Rgb(244, 246, 251),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(227, 232, 244),
+            selection_bg: Color::Rgb(210, 219, 240),
+            surface0: Color::Rgb(221, 227, 241),
+            surface1: Color::Rgb(201, 210, 234),
+            surface_dim: Color::Rgb(234, 238, 247),
+            overlay0: Color::Rgb(122, 132, 168),
+            overlay1: Color::Rgb(95, 106, 145),
+            text: Color::Rgb(27, 34, 64),
+            subtext0: Color::Rgb(61, 70, 112),
+            mauve: Color::Rgb(123, 63, 228),
+            green: Color::Rgb(90, 103, 168), // idle
+            yellow: Color::Rgb(0, 119, 182), // working
+            red: Color::Rgb(194, 24, 143),   // needs you
+            blue: Color::Rgb(47, 107, 216),
+            teal: Color::Rgb(31, 157, 85), // done
+            peach: Color::Rgb(198, 106, 0),
+        }
+    }
+
     pub fn catppuccin() -> Self {
         Self {
             accent: Color::Rgb(137, 180, 250), // blue
@@ -527,6 +579,8 @@ impl Palette {
     /// Resolve a theme by name. Returns None for unknown names.
     pub fn from_name(name: &str) -> Option<Self> {
         match crate::config::canonical_theme_name(name)? {
+            "midnight-neon" => Some(Self::midnight_neon()),
+            "neon-day" => Some(Self::neon_day()),
             "catppuccin" => Some(Self::catppuccin()),
             "catppuccin-latte" => Some(Self::catppuccin_latte()),
             "terminal" => Some(Self::terminal()),
@@ -1461,6 +1515,24 @@ mod tests {
                 palette.selection_bg, palette.active_row_bg,
                 "selection row shares the active row color for {name}"
             );
+        }
+    }
+
+    #[test]
+    fn neon_themes_keep_agent_states_readable_and_distinct() {
+        for palette in [Palette::midnight_neon(), Palette::neon_day()] {
+            // working, needs you, done, idle as drawn by the status indicators.
+            let states = [palette.yellow, palette.red, palette.teal, palette.green];
+            for color in states {
+                let contrast = contrast_ratio(color, palette.panel_bg);
+                assert!(contrast >= 3.0, "state color {color:?} has {contrast:.2}:1");
+            }
+            for (index, color) in states.iter().enumerate() {
+                assert!(
+                    !states[index + 1..].contains(color),
+                    "agent states must not share a color"
+                );
+            }
         }
     }
 

@@ -221,6 +221,10 @@ fn normalize_theme_name(name: &str) -> String {
 
 fn sibling_theme_names(name: &str) -> (String, String) {
     match normalize_theme_name(name).as_str() {
+        "midnight-neon" | "midnight" | "neon" | "neon-day" | "neon-light" => (
+            crate::config::DEFAULT_THEME_NAME.to_string(),
+            crate::config::DEFAULT_LIGHT_THEME_NAME.to_string(),
+        ),
         "catppuccin" | "catppuccin-mocha" | "catppuccin-latte" | "latte" | "light" => {
             ("catppuccin".to_string(), "catppuccin-latte".to_string())
         }
@@ -254,7 +258,7 @@ fn theme_runtime_config(
         .theme
         .name
         .clone()
-        .unwrap_or_else(|| "catppuccin".to_string());
+        .unwrap_or_else(|| crate::config::DEFAULT_THEME_NAME.to_string());
     let (default_dark, default_light) = sibling_theme_names(&manual_name);
     state::ThemeRuntimeConfig {
         manual_name,
@@ -286,7 +290,7 @@ fn resolve_palette_for_theme_name(
             fallback = fallback_name,
             "unknown theme, falling back"
         );
-        state::Palette::from_name(fallback_name).unwrap_or_else(state::Palette::catppuccin)
+        state::Palette::from_name(fallback_name).unwrap_or_else(state::Palette::midnight_neon)
     });
 
     if let Some(custom) = &runtime.custom {
@@ -310,7 +314,7 @@ fn resolve_effective_theme(
         match appearance.unwrap_or(crate::terminal_theme::HostAppearance::Dark) {
             crate::terminal_theme::HostAppearance::Dark => (
                 &runtime.dark_name,
-                "catppuccin",
+                crate::config::DEFAULT_THEME_NAME,
                 runtime
                     .custom
                     .as_ref()
@@ -318,7 +322,7 @@ fn resolve_effective_theme(
             ),
             crate::terminal_theme::HostAppearance::Light => (
                 &runtime.light_name,
-                "catppuccin-latte",
+                crate::config::DEFAULT_LIGHT_THEME_NAME,
                 runtime
                     .custom
                     .as_ref()
@@ -326,7 +330,11 @@ fn resolve_effective_theme(
             ),
         }
     } else {
-        (&runtime.manual_name, "catppuccin", None)
+        (
+            &runtime.manual_name,
+            crate::config::DEFAULT_THEME_NAME,
+            None,
+        )
     };
     (
         resolve_palette_for_theme_name(name, fallback, runtime, mode_custom),
@@ -342,7 +350,7 @@ pub(crate) fn client_palette_for_theme(
     runtime: &state::ThemeRuntimeConfig,
     name: &str,
 ) -> state::Palette {
-    resolve_palette_for_theme_name(name, "catppuccin", runtime, None)
+    resolve_palette_for_theme_name(name, crate::config::DEFAULT_THEME_NAME, runtime, None)
 }
 
 pub(crate) fn client_palette_from_config(config: &Config) -> state::Palette {
@@ -1001,6 +1009,35 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn herdr_plus_defaults_to_midnight_neon_with_a_neon_day_light_sibling() {
+        let config = Config::default();
+        assert_eq!(
+            client_palette_from_config(&config),
+            state::Palette::midnight_neon()
+        );
+
+        let runtime = client_theme_runtime_from_config(&config);
+        assert_eq!(runtime.manual_name, "midnight-neon");
+        assert_eq!(runtime.dark_name, "midnight-neon");
+        assert_eq!(runtime.light_name, "neon-day");
+
+        let mut switching = runtime.clone();
+        switching.auto_switch = true;
+        let (light, name) = resolve_effective_theme(
+            &switching,
+            Some(crate::terminal_theme::HostAppearance::Light),
+        );
+        assert_eq!(name, "neon-day");
+        assert_eq!(light, state::Palette::neon_day());
+
+        // Unknown names fall back to the new default rather than catppuccin.
+        assert_eq!(
+            client_palette_for_theme(&runtime, "no-such-theme"),
+            state::Palette::midnight_neon()
+        );
+    }
     use crate::config::Config;
     use crate::detect::{Agent, AgentState};
     use crate::workspace::Workspace;
