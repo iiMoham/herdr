@@ -1016,6 +1016,12 @@
           ]
         },
         {
+          "key": "ui.tab_bar_padding",
+          "type": "integer",
+          "default": "0",
+          "description": "Blank rows between the desktop tab row and the terminal panes, below a top tab row or above a bottom one. Values above 2 behave as 2. Ignored while the tab row is hidden, in the mobile layout, and when the terminal is too short to keep a pane row."
+        },
+        {
           "key": "ui.tab_bar_right",
           "type": "array",
           "default": "[]",

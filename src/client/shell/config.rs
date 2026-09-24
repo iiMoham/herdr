@@ -1,5 +1,8 @@
 use super::*;
 
+/// Upper bound for `ui.tab_bar_padding`; larger values behave as this many rows.
+const MAX_TAB_BAR_PADDING: u16 = 2;
+
 pub(super) fn merged_config_diagnostic(
     local: Option<&str>,
     endpoint: Option<&str>,
@@ -120,6 +123,7 @@ impl ClientShellConfig {
             sidebar_collapsed_mode: config.ui.sidebar_collapsed_mode,
             mobile_width_threshold: config.ui.mobile_width_threshold,
             tab_bar_position: config.ui.tab_bar_position,
+            tab_bar_padding: config.ui.tab_bar_padding,
             hide_tab_bar_when_single_tab: config.ui.hide_tab_bar_when_single_tab,
             spaces: config.ui.sidebar.spaces.clone(),
             agents: config.ui.sidebar.agents.clone(),
@@ -323,6 +327,7 @@ impl ClientShellConfig {
                 self.sidebar_collapsed_mode = ui.sidebar_collapsed_mode;
                 self.mobile_width_threshold = ui.mobile_width_threshold;
                 self.tab_bar_position = ui.tab_bar_position;
+                self.tab_bar_padding = ui.tab_bar_padding;
                 self.hide_tab_bar_when_single_tab = ui.hide_tab_bar_when_single_tab;
                 self.spaces = ui.sidebar.spaces.clone();
                 self.agents = ui.sidebar.agents.clone();
@@ -394,15 +399,19 @@ impl ClientShellConfig {
         let main = Rect::new(sidebar_width, 0, cols.saturating_sub(sidebar_width), rows);
         let show_tab_bar = rows > 1 && !(self.hide_tab_bar_when_single_tab && tab_count == 1);
         let tab_height = u16::from(show_tab_bar);
+        // Padding yields first on short terminals so the panes keep at least one row.
+        let padding = if show_tab_bar {
+            self.tab_bar_padding
+                .min(MAX_TAB_BAR_PADDING)
+                .min(rows.saturating_sub(tab_height + 1))
+        } else {
+            0
+        };
+        let pane_height = rows.saturating_sub(tab_height + padding);
         let (tab_bar, pane_surface) = match self.tab_bar_position {
             TabBarPositionConfig::Top => (
                 Rect::new(main.x, 0, main.width, tab_height),
-                Rect::new(
-                    main.x,
-                    tab_height,
-                    main.width,
-                    rows.saturating_sub(tab_height),
-                ),
+                Rect::new(main.x, tab_height + padding, main.width, pane_height),
             ),
             TabBarPositionConfig::Bottom => (
                 Rect::new(
@@ -411,7 +420,7 @@ impl ClientShellConfig {
                     main.width,
                     tab_height,
                 ),
-                Rect::new(main.x, 0, main.width, rows.saturating_sub(tab_height)),
+                Rect::new(main.x, 0, main.width, pane_height),
             ),
         };
 
@@ -458,6 +467,7 @@ mod tests {
         let mut next = Config::default();
         next.ui.sidebar_width = 31;
         next.ui.tab_bar_position = TabBarPositionConfig::Bottom;
+        next.ui.tab_bar_padding = 2;
         next.ui.agent_panel_sort = crate::config::AgentPanelSortConfig::Priority;
         next.ui.status_indicators = crate::config::StatusIndicatorStyle::Symbols;
         next.ui.sidebar.agents = toml::from_str("rows = [[{ token = 'machine', rules = [{ equals = 'Local', bold = true }] }]]\nrow_gap = 2").unwrap();
@@ -468,6 +478,7 @@ mod tests {
         assert!(diagnostics.is_empty());
         assert_eq!(shell.sidebar_width, 31);
         assert_eq!(shell.tab_bar_position, TabBarPositionConfig::Bottom);
+        assert_eq!(shell.tab_bar_padding, 2);
         assert_eq!(
             shell.agent_panel_sort,
             crate::config::AgentPanelSortConfig::Priority
@@ -494,6 +505,75 @@ mod tests {
         assert_eq!(
             shell.keybinds.prefix,
             (KeyCode::Char('a'), KeyModifiers::CONTROL)
+        );
+    }
+
+    fn padded_layout(position: TabBarPositionConfig, padding: u16, rows: u16) -> ClientShellLayout {
+        let mut config = Config::default();
+        config.ui.tab_bar_position = position;
+        config.ui.tab_bar_padding = padding;
+        ClientShellConfig::from_config(&config).layout(120, rows, false, 2, 26)
+    }
+
+    #[test]
+    fn layout_tab_bar_padding_top_and_bottom() {
+        for padding in 0..=2 {
+            let top = padded_layout(TabBarPositionConfig::Top, padding, 30);
+            assert_eq!(top.tab_bar, Rect::new(26, 0, 94, 1));
+            assert_eq!(
+                top.pane_surface,
+                Rect::new(26, 1 + padding, 94, 29 - padding)
+            );
+
+            let bottom = padded_layout(TabBarPositionConfig::Bottom, padding, 30);
+            assert_eq!(bottom.tab_bar, Rect::new(26, 29, 94, 1));
+            assert_eq!(bottom.pane_surface, Rect::new(26, 0, 94, 29 - padding));
+            assert!(bottom.pane_surface.bottom() + padding == bottom.tab_bar.y);
+        }
+    }
+
+    #[test]
+    fn layout_tab_bar_padding_clamps_to_max() {
+        for position in [TabBarPositionConfig::Top, TabBarPositionConfig::Bottom] {
+            assert_eq!(
+                padded_layout(position, 9, 30),
+                padded_layout(position, MAX_TAB_BAR_PADDING, 30)
+            );
+        }
+    }
+
+    #[test]
+    fn layout_tab_bar_padding_skipped_when_tab_bar_hidden() {
+        let mut config = Config::default();
+        config.ui.tab_bar_padding = 2;
+        config.ui.hide_tab_bar_when_single_tab = true;
+        let layout = ClientShellConfig::from_config(&config).layout(120, 30, false, 1, 26);
+        assert!(layout.tab_bar.is_empty());
+        assert_eq!(layout.pane_surface, Rect::new(26, 0, 94, 30));
+    }
+
+    #[test]
+    fn layout_tab_bar_padding_yields_to_short_terminals() {
+        for (rows, pane_height) in [(2, 1), (3, 1), (4, 1), (5, 2)] {
+            let top = padded_layout(TabBarPositionConfig::Top, 2, rows);
+            assert_eq!(top.pane_surface.height, pane_height, "rows {rows}");
+            assert_eq!(top.pane_surface.bottom(), rows);
+            let bottom = padded_layout(TabBarPositionConfig::Bottom, 2, rows);
+            assert_eq!(bottom.pane_surface.height, pane_height, "rows {rows}");
+            assert_eq!(bottom.tab_bar.y, rows - 1);
+        }
+    }
+
+    #[test]
+    fn layout_tab_bar_padding_ignored_on_mobile() {
+        let mut config = Config::default();
+        config.ui.tab_bar_padding = 2;
+        let padded = ClientShellConfig::from_config(&config);
+        let plain = ClientShellConfig::from_config(&Config::default());
+        let cols = padded.mobile_width_threshold;
+        assert_eq!(
+            padded.layout(cols, 30, false, 2, 26),
+            plain.layout(cols, 30, false, 2, 26)
         );
     }
 
