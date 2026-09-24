@@ -4824,6 +4824,46 @@
           },
           "type": "object"
         },
+        "WorktreeRemovalCheckParams": {
+          "properties": {
+            "trust_repository": {
+              "type": "boolean"
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspace_id"
+          ],
+          "type": "object"
+        },
+        "WorktreeRemoveDiscardingNestedParams": {
+          "description": "Remove a linked worktree checkout even though nested repositories inside it\nhold work that would be lost. Every at-risk repository must be listed in\n`nested_paths`; anything else found at removal time refuses again.",
+          "properties": {
+            "force": {
+              "default": false,
+              "type": "boolean"
+            },
+            "nested_paths": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "trust_repository": {
+              "type": "boolean"
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspace_id",
+            "nested_paths"
+          ],
+          "type": "object"
+        },
         "WorktreeRemoveParams": {
           "properties": {
             "force": {
@@ -5285,6 +5325,38 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/WorktreeRemoveParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "worktree.removal_check",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/WorktreeRemovalCheckParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "worktree.remove_discarding_nested",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/WorktreeRemoveDiscardingNestedParams"
             }
           },
           "required": [
@@ -8038,6 +8110,68 @@
             }
           ]
         },
+        "NestedRepositoryKind": {
+          "enum": [
+            "clone",
+            "submodule",
+            "linked_worktree",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "NestedRepositoryRiskInfo": {
+          "properties": {
+            "inspection_error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "$ref": "#/schemas/success_response/$defs/NestedRepositoryKind"
+            },
+            "modified": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "relative_path": {
+              "type": "string"
+            },
+            "stashes": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "unpushed_commits": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "untracked": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "path",
+            "relative_path",
+            "kind",
+            "summary",
+            "modified",
+            "untracked",
+            "stashes",
+            "unpushed_commits"
+          ],
+          "type": "object"
+        },
         "NotificationShowReason": {
           "enum": [
             "shown",
@@ -9657,6 +9791,22 @@
             },
             {
               "properties": {
+                "check": {
+                  "$ref": "#/schemas/success_response/$defs/WorktreeRemovalCheckResult"
+                },
+                "type": {
+                  "const": "worktree_removal_check",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "check"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
                 "tab": {
                   "$ref": "#/schemas/success_response/$defs/TabInfo"
                 },
@@ -11084,6 +11234,34 @@
             "is_prunable",
             "is_linked_worktree",
             "label"
+          ],
+          "type": "object"
+        },
+        "WorktreeRemovalCheckResult": {
+          "properties": {
+            "checkout_path": {
+              "type": "string"
+            },
+            "complete": {
+              "description": "False when the scan stopped early (very large checkout or unreadable directory).",
+              "type": "boolean"
+            },
+            "nested": {
+              "description": "Nested repositories whose work removal would lose. Empty means safe to remove.",
+              "items": {
+                "$ref": "#/schemas/success_response/$defs/NestedRepositoryRiskInfo"
+              },
+              "type": "array"
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspace_id",
+            "checkout_path",
+            "complete",
+            "nested"
           ],
           "type": "object"
         },

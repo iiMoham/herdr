@@ -1,5 +1,6 @@
 use crate::api::schema::{
-    WorktreeCreateParams, WorktreeListParams, WorktreeOpenParams, WorktreeRemoveParams,
+    Method, Request, WorktreeCreateParams, WorktreeListParams, WorktreeOpenParams,
+    WorktreeRemovalCheckParams, WorktreeRemoveDiscardingNestedParams, WorktreeRemoveParams,
 };
 
 // Worktree output is always JSON. The parsers retain `--json` as a hidden compatibility no-op.
@@ -14,6 +15,7 @@ pub(super) fn run_worktree_command(args: &[String]) -> std::io::Result<i32> {
         "create" => worktree_create(&args[1..]),
         "open" => worktree_open(&args[1..]),
         "remove" => worktree_remove(&args[1..]),
+        "removal-check" => worktree_removal_check(&args[1..]),
         "help" | "--help" | "-h" => {
             print_worktree_help();
             Ok(0)
@@ -269,6 +271,7 @@ fn worktree_open(args: &[String]) -> std::io::Result<i32> {
 fn worktree_remove(args: &[String]) -> std::io::Result<i32> {
     let mut workspace_id = None;
     let mut force = false;
+    let mut discard_nested = false;
     let mut trust_repository = false;
 
     let mut index = 0;
@@ -286,6 +289,10 @@ fn worktree_remove(args: &[String]) -> std::io::Result<i32> {
                 force = true;
                 index += 1;
             }
+            "--discard-nested" => {
+                discard_nested = true;
+                index += 1;
+            }
             "--trust-repository" => {
                 trust_repository = true;
                 index += 1;
@@ -299,15 +306,103 @@ fn worktree_remove(args: &[String]) -> std::io::Result<i32> {
     }
 
     let Some(workspace_id) = workspace_id else {
-        eprintln!("usage: herdr worktree remove --workspace ID [--force] [--trust-repository]");
+        eprintln!("{WORKTREE_REMOVE_USAGE}");
         return Ok(2);
     };
 
-    super::runtime::worktree_remove(WorktreeRemoveParams {
+    let params = WorktreeRemoveParams {
         workspace_id,
         force,
         trust_repository,
-    })
+    };
+    if discard_nested {
+        return worktree_remove_discarding_nested(params);
+    }
+    super::runtime::worktree_remove(params)
+}
+
+const WORKTREE_REMOVE_USAGE: &str =
+    "usage: herdr worktree remove --workspace ID [--force] [--discard-nested] [--trust-repository]";
+
+/// Check first, show exactly what will be discarded, then remove while
+/// acknowledging only those repositories. Work that appears between the two
+/// steps is refused by the server rather than deleted.
+fn worktree_remove_discarding_nested(params: WorktreeRemoveParams) -> std::io::Result<i32> {
+    let check = super::send_request(&Request {
+        id: "cli:worktree:removal-check".into(),
+        method: Method::WorktreeRemovalCheck(WorktreeRemovalCheckParams {
+            workspace_id: params.workspace_id.clone(),
+            trust_repository: params.trust_repository,
+        }),
+    })?;
+    if check.get("error").is_some() {
+        return super::print_response(&check);
+    }
+    let nested = check["result"]["check"]["nested"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let mut nested_paths = Vec::new();
+    for repository in &nested {
+        let path = repository["path"].as_str().unwrap_or_default().to_owned();
+        eprintln!(
+            "discarding {}: {}",
+            repository["relative_path"].as_str().unwrap_or(&path),
+            repository["summary"].as_str().unwrap_or_default()
+        );
+        nested_paths.push(path);
+    }
+    if check["result"]["check"]["complete"] == false {
+        eprintln!("the checkout is too large to verify completely; removing anyway");
+    }
+    super::print_response(&super::send_request(&Request {
+        id: "cli:worktree:remove".into(),
+        method: Method::WorktreeRemoveDiscardingNested(WorktreeRemoveDiscardingNestedParams {
+            workspace_id: params.workspace_id,
+            force: params.force,
+            trust_repository: params.trust_repository,
+            nested_paths,
+        }),
+    })?)
+}
+
+fn worktree_removal_check(args: &[String]) -> std::io::Result<i32> {
+    let mut workspace_id = None;
+    let mut trust_repository = false;
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--workspace" => {
+                let Some(value) = args.get(index + 1) else {
+                    eprintln!("missing value for --workspace");
+                    return Ok(2);
+                };
+                workspace_id = Some(super::normalize_workspace_id(value));
+                index += 2;
+            }
+            "--trust-repository" => {
+                trust_repository = true;
+                index += 1;
+            }
+            "--json" => index += 1,
+            other => {
+                eprintln!("unknown option: {other}");
+                return Ok(2);
+            }
+        }
+    }
+    let Some(workspace_id) = workspace_id else {
+        eprintln!("usage: herdr worktree removal-check --workspace ID [--trust-repository]");
+        return Ok(2);
+    };
+    super::print_response(&super::send_request(&Request {
+        id: "cli:worktree:removal-check".into(),
+        method: Method::WorktreeRemovalCheck(WorktreeRemovalCheckParams {
+            workspace_id,
+            trust_repository,
+        }),
+    })?)
 }
 
 fn print_worktree_help() {
@@ -319,7 +414,10 @@ fn print_worktree_help() {
     eprintln!(
         "  herdr worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
     );
-    eprintln!("  herdr worktree remove --workspace ID [--force] [--trust-repository]");
+    eprintln!(
+        "  herdr worktree remove --workspace ID [--force] [--discard-nested] [--trust-repository]"
+    );
+    eprintln!("  herdr worktree removal-check --workspace ID [--trust-repository]");
 }
 
 fn normalize_path_arg(value: &str) -> std::io::Result<String> {

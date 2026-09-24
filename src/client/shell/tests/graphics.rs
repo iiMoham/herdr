@@ -255,6 +255,8 @@ fn every_dialog_and_menu_occludes_its_panel_not_the_whole_screen() {
             error: None,
             removing: false,
             force_confirmation: false,
+            nested: None,
+            nested_check_complete: true,
         }),
         ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
             target: ClientContextMenuTarget::Tab {

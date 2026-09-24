@@ -53,7 +53,9 @@ const CLIENT_SHELL_METHODS: &[&str] = &[
     "worktree.create",
     "worktree.list",
     "worktree.open",
+    "worktree.removal_check",
     "worktree.remove",
+    "worktree.remove_discarding_nested",
 ];
 
 pub(crate) fn supported_client_shell_method_names() -> &'static [&'static str] {
@@ -301,6 +303,16 @@ mod tests {
         assert_eq!(
             actual.remove("tab.set_input_sync").as_deref(),
             Some("84995511e486f99dad830b2b811f93b5f337da741f30b797ebe1f816407b8957")
+        );
+        assert_eq!(
+            actual.remove("worktree.removal_check").as_deref(),
+            Some("c57bafaba72ebf300aa051ae0e251a627738e15f83dd3dadbefb622905e0bc92")
+        );
+        assert_eq!(
+            actual
+                .remove("worktree.remove_discarding_nested")
+                .as_deref(),
+            Some("fe9983d9924d51438326638bade293913c257803a9a1715559883b4c2f612250")
         );
 
         assert_eq!(

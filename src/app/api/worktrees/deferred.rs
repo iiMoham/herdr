@@ -3,7 +3,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::api::schema::{
     EventData, EventEnvelope, EventKind, Request, ResponseResult, WorktreeCreateParams,
-    WorktreeRemoveParams,
+    WorktreeRemovalCheckParams, WorktreeRemovalCheckResult, WorktreeRemoveParams,
 };
 use crate::app::App;
 use crate::events::{ApiWorktreeAddRequest, ApiWorktreeRemoveRequest, AppEvent};
@@ -29,7 +29,29 @@ impl App {
                 true
             }
             crate::api::schema::Method::WorktreeRemove(params) => {
-                self.start_api_worktree_remove(request.id, params, respond_to);
+                self.start_api_worktree_remove(request.id, params, None, respond_to);
+                true
+            }
+            crate::api::schema::Method::WorktreeRemoveDiscardingNested(params) => {
+                let acknowledged = params
+                    .nested_paths
+                    .iter()
+                    .map(std::path::PathBuf::from)
+                    .collect();
+                self.start_api_worktree_remove(
+                    request.id,
+                    WorktreeRemoveParams {
+                        workspace_id: params.workspace_id,
+                        force: params.force,
+                        trust_repository: params.trust_repository,
+                    },
+                    Some(acknowledged),
+                    respond_to,
+                );
+                true
+            }
+            crate::api::schema::Method::WorktreeRemovalCheck(params) => {
+                self.start_api_worktree_removal_check(request.id, params, respond_to);
                 true
             }
             _ => false,
@@ -218,10 +240,85 @@ impl App {
         });
     }
 
+    /// Report nested repositories that removing this workspace's checkout would
+    /// lose, without removing anything. The scan runs on its own thread.
+    fn start_api_worktree_removal_check(
+        &mut self,
+        id: String,
+        params: WorktreeRemovalCheckParams,
+        respond_to: std::sync::mpsc::Sender<String>,
+    ) {
+        let Some(ws_idx) = self.parse_workspace_id(&params.workspace_id) else {
+            Self::send_api_response(
+                respond_to,
+                encode_error(
+                    id,
+                    "workspace_not_found",
+                    format!("workspace {} not found", params.workspace_id),
+                ),
+            );
+            return;
+        };
+        let Some(space) = self
+            .state
+            .workspaces
+            .get(ws_idx)
+            .and_then(|ws| ws.worktree_space().cloned())
+            .filter(|space| space.is_linked_worktree)
+        else {
+            Self::send_api_response(
+                respond_to,
+                encode_error(
+                    id,
+                    "not_linked_worktree",
+                    "workspace is not a linked worktree checkout",
+                ),
+            );
+            return;
+        };
+        let workspace_id = self.public_workspace_id(ws_idx);
+        let path = space.checkout_path;
+        let trust_repository = params.trust_repository;
+        let spawn_error = (id.clone(), respond_to.clone());
+        let spawned = std::thread::Builder::new()
+            .name("worktree-removal-check".into())
+            .spawn(move || {
+                let check = crate::worktree_removal_check::check_checkout_for_removal(
+                    &path,
+                    trust_repository,
+                );
+                let check = WorktreeRemovalCheckResult {
+                    workspace_id,
+                    checkout_path: path.display().to_string(),
+                    complete: check.complete,
+                    nested: check.at_risk.iter().map(|risk| risk.to_info()).collect(),
+                };
+                let _ = respond_to.send(encode_success(
+                    id,
+                    ResponseResult::WorktreeRemovalCheck { check },
+                ));
+            });
+        if let Err(err) = spawned {
+            let (id, respond_to) = spawn_error;
+            Self::send_api_response(
+                respond_to,
+                encode_error(
+                    id,
+                    "worktree_removal_check_failed",
+                    format!("could not start the removal check: {err}"),
+                ),
+            );
+        }
+    }
+
+    /// `acknowledged_nested` is `None` for a plain `worktree.remove`, which refuses
+    /// whenever nested repositories would lose work, and the reviewed list for
+    /// `worktree.remove_discarding_nested`, which refuses only for unlisted ones.
     fn start_api_worktree_remove(
         &mut self,
         id: String,
         params: WorktreeRemoveParams,
+        acknowledged_nested: Option<Vec<std::path::PathBuf>>,
         respond_to: std::sync::mpsc::Sender<String>,
     ) {
         let Some(ws_idx) = self.parse_workspace_id(&params.workspace_id) else {
@@ -348,13 +445,27 @@ impl App {
         let trust_repository = params.trust_repository;
         let event_tx = self.event_tx.clone();
         std::thread::spawn(move || {
-            let result = crate::worktree::run_worktree_remove_command_with_recovery(
-                &command,
-                &repo_root,
-                &path,
-                force,
-                trust_repository,
-            );
+            // Git cannot see repositories nested inside the checkout, so check them
+            // before anything is deleted, for forced removals too.
+            let check =
+                crate::worktree_removal_check::check_checkout_for_removal(&path, trust_repository);
+            let refusal = match &acknowledged_nested {
+                None => check.refusal(&path),
+                Some(acknowledged) => check.unacknowledged_refusal(&path, acknowledged),
+            };
+            let (refusal_code, result) = match refusal {
+                Some((refusal, message)) => (Some(refusal.code()), Err(message)),
+                None => (
+                    None,
+                    crate::worktree::run_worktree_remove_command_with_recovery(
+                        &command,
+                        &repo_root,
+                        &path,
+                        force,
+                        trust_repository,
+                    ),
+                ),
+            };
             let _ = event_tx.blocking_send(AppEvent::WorktreeRemoveFinished(Box::new(
                 crate::events::WorktreeRemoveResult {
                     workspace_id: workspace_internal_id,
@@ -363,6 +474,7 @@ impl App {
                     worktree: Some(Box::new(worktree)),
                     forced: force,
                     api_request: Some(api_request),
+                    refusal_code,
                     result,
                 },
             )));
@@ -520,12 +632,13 @@ impl App {
                 api.operation_id,
                 &result.path,
             );
-            let code =
-                if !result.forced && crate::worktree::is_dirty_worktree_remove_error(&message) {
-                    "dirty_worktree_requires_force"
-                } else {
-                    "worktree_remove_failed"
-                };
+            let code = if let Some(code) = result.refusal_code {
+                code
+            } else if !result.forced && crate::worktree::is_dirty_worktree_remove_error(&message) {
+                "dirty_worktree_requires_force"
+            } else {
+                "worktree_remove_failed"
+            };
             Self::send_api_response(api.respond_to, encode_error(api.id, code, message));
             return pane_updates;
         }

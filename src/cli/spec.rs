@@ -263,6 +263,18 @@ fn worktree_command() -> Command {
                 .about("Remove a worktree checkout")
                 .arg(option("workspace", "ID"))
                 .arg(flag("force"))
+                .arg(flag("discard-nested").help(
+                    "Also delete nested repositories that hold unsaved or unpushed work",
+                ))
+                .arg(flag("trust-repository"))
+                .after_help(
+                    "Removal refuses when Git repositories nested in the checkout have uncommitted changes, untracked files, stashes, or commits on no remote, even with --force. --discard-nested lists them and deletes them anyway.",
+                ),
+        )
+        .subcommand(
+            Command::new("removal-check")
+                .about("Show nested repository work that removing a checkout would lose")
+                .arg(option("workspace", "ID"))
                 .arg(flag("trust-repository")),
         )
 }
@@ -1198,6 +1210,46 @@ mod tests {
             error.kind(),
             clap::error::ErrorKind::MissingRequiredArgument
         );
+    }
+
+    #[test]
+    fn worktree_removal_accepts_discard_nested_and_a_dry_run_check() {
+        for valid in [
+            &[
+                "herdr",
+                "worktree",
+                "remove",
+                "--workspace",
+                "w2",
+                "--discard-nested",
+            ][..],
+            &[
+                "herdr",
+                "worktree",
+                "remove",
+                "--workspace",
+                "w2",
+                "--force",
+                "--discard-nested",
+            ][..],
+            &["herdr", "worktree", "removal-check", "--workspace", "w2"][..],
+            &[
+                "herdr",
+                "worktree",
+                "removal-check",
+                "--workspace",
+                "w2",
+                "--trust-repository",
+            ][..],
+        ] {
+            assert!(
+                super::command().try_get_matches_from(valid).is_ok(),
+                "{valid:?}"
+            );
+        }
+        assert!(super::command()
+            .try_get_matches_from(["herdr", "worktree", "removal-check", "--discard-nested"])
+            .is_err());
     }
 
     #[test]

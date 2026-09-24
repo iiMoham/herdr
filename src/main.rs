@@ -61,6 +61,7 @@ mod ui;
 mod update;
 mod workspace;
 mod worktree;
+mod worktree_removal_check;
 
 const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Place this file at ~/.config/herdr/config.toml

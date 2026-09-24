@@ -3153,10 +3153,15 @@ impl HeadlessServer {
             &msg.request.method,
             api::schema::Method::WorktreeCreate(_)
                 | api::schema::Method::WorktreeRemove(_)
+                | api::schema::Method::WorktreeRemoveDiscardingNested(_)
+                | api::schema::Method::WorktreeRemovalCheck(_)
                 | api::schema::Method::WorktreeList(_)
                 | api::schema::Method::WorktreeOpen(_)
         ) {
-            let read_only = matches!(&msg.request.method, api::schema::Method::WorktreeList(_));
+            let read_only = matches!(
+                &msg.request.method,
+                api::schema::Method::WorktreeList(_) | api::schema::Method::WorktreeRemovalCheck(_)
+            );
             let deferred_changed = self.app.handle_deferred_worktree_api_request(
                 msg.request,
                 msg.respond_to,

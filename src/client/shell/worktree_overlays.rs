@@ -310,7 +310,9 @@ pub(super) fn render_worktree_remove_overlay(
     remove: &ClientWorktreeRemoveOverlay,
     p: &Palette,
 ) -> Option<OverlayRender> {
-    let popup = popup(b.area, 72, 10)?;
+    let nested_lines = nested_risk_lines(remove);
+    let extra = u16::try_from(nested_lines.len()).unwrap_or(u16::MAX);
+    let popup = popup(b.area, 72, 10u16.saturating_add(extra))?;
     let inner = panel(b, popup, p.red, p.panel_bg)?;
     put_text(
         b,
@@ -357,11 +359,22 @@ pub(super) fn render_worktree_remove_overlay(
             Style::default().fg(p.red).bg(p.panel_bg),
         );
     }
+    for (offset, line) in (0u16..).zip(&nested_lines) {
+        put_text(
+            b,
+            inner.x,
+            inner.y.saturating_add(5).saturating_add(offset),
+            inner.width,
+            line,
+            Style::default().fg(p.red).bg(p.panel_bg),
+        );
+    }
+    let status_row = inner.y.saturating_add(5).saturating_add(extra);
     if remove.removing {
         put_text(
             b,
             inner.x,
-            inner.y + 5,
+            status_row,
             inner.width,
             " removing…",
             Style::default().fg(p.accent).bg(p.panel_bg),
@@ -370,24 +383,30 @@ pub(super) fn render_worktree_remove_overlay(
         put_text(
             b,
             inner.x,
-            inner.y + 5,
+            status_row,
             inner.width,
             &format!(" {error}"),
             Style::default().fg(p.red).bg(p.panel_bg),
         );
     }
-    let buttons = row(inner, &[18, 12], 2, 7);
+    let primary_label = if remove.nested.is_some() {
+        " ↵ discard nested work "
+    } else if remove.force_confirmation {
+        " ↵ delete anyway "
+    } else {
+        " ↵ remove "
+    };
+    let primary_width = u16::try_from(primary_label.chars().count())
+        .unwrap_or(18)
+        .max(18);
+    let buttons = row(inner, &[primary_width, 12], 2, 7u16.saturating_add(extra));
     let [primary, cancel] = buttons.as_slice() else {
         return None;
     };
     button(
         b,
         *primary,
-        if remove.force_confirmation {
-            " ↵ delete anyway "
-        } else {
-            " ↵ remove "
-        },
+        primary_label,
         Style::default()
             .fg(contrast(p))
             .bg(p.red)
@@ -415,4 +434,28 @@ pub(super) fn render_worktree_remove_overlay(
         cursor: None,
         ..OverlayRender::default()
     })
+}
+
+/// Warning rows for nested repositories that discarding would delete: a heading,
+/// up to three repositories, and a count of the rest.
+fn nested_risk_lines(remove: &ClientWorktreeRemoveOverlay) -> Vec<String> {
+    const SHOWN: usize = 3;
+    let Some(nested) = remove.nested.as_ref() else {
+        return Vec::new();
+    };
+    let mut lines = vec![if nested.is_empty() {
+        " Too large to verify nested repositories; they may hold unsaved work.".to_owned()
+    } else {
+        " Nested repositories with work that will be lost:".to_owned()
+    }];
+    for risk in nested.iter().take(SHOWN) {
+        lines.push(format!("   {}: {}", risk.relative_path, risk.summary));
+    }
+    if nested.len() > SHOWN {
+        lines.push(format!("   …and {} more", nested.len() - SHOWN));
+    }
+    if !nested.is_empty() && !remove.nested_check_complete {
+        lines.push("   (scan stopped early; more may be at risk)".to_owned());
+    }
+    lines
 }
