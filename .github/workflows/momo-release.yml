@@ -129,7 +129,12 @@ jobs:
 
       - name: Check Linux binary is static
         if: runner.os == 'Linux'
-        run: file "$ASSET" | grep -q "statically linked"
+        run: |
+          # musl builds are static-pie: `file` says "static-pie linked" and
+          # `ldd` says "statically linked"; either proves no dynamic loader.
+          report="$(file "$ASSET"; ldd "$ASSET" 2>&1 || true)"
+          echo "$report"
+          echo "$report" | grep -qE "statically linked|static-pie linked"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
