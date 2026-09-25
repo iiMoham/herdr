@@ -2163,7 +2163,7 @@ mod tests {
         assert!(shown);
         let args = std::fs::read_to_string(&path).expect("args file");
         let _ = std::fs::remove_file(&path);
-        assert_eq!(args, "--app-name\nHerdr\n--\n-danger\nbody\n");
+        assert_eq!(args, "--app-name\nMoMo\n--\n-danger\nbody\n");
     }
 
     #[test]
