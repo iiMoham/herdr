@@ -70,4 +70,6 @@ jobs:
       - name: Test gate
         env:
           NEXTEST_FILTER: ${{ matrix.nextest_filter }}
+          # Report every failing test in one run, not just the first.
+          NEXTEST_NO_FAIL_FAST: "1"
         run: just ci "$NEXTEST_FILTER" && just fork-plugins-test
