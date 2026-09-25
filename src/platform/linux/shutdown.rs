@@ -50,7 +50,7 @@ async fn watch_connection(
             "Inhibit",
             &(
                 "shutdown",
-                "Herdr",
+                "MoMo",
                 "Save terminal workspace layout",
                 "delay",
             ),

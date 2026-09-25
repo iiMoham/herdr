@@ -41,7 +41,7 @@ Set `min_herdr_version` to the oldest release whose CLI/API the plugin uses (che
 ## Implementation rules
 
 - Call Herdr through `$HERDR_BIN_PATH`, never a bare `herdr`, so the plugin talks to the server that
-  launched it (this matters when a debug `herdr-dev` server runs next to the user's installed one).
+  launched it (this matters when a debug `momo-dev` server runs next to the user's installed one).
 - Prefer POSIX `sh` plus the herdr CLI with `--json`/JSON output parsed by a tool you already depend
   on. If you need structured JSON processing, use a single small script runtime and document it.
   Do not add npm dependencies without asking.
@@ -60,7 +60,7 @@ Set `min_herdr_version` to the oldest release whose CLI/API the plugin uses (che
 2. In a throwaway session (see `herdr-throwaway-repro` and `herdr-fork-dev`), using the debug binary:
 
    ```bash
-   H="$PWD/target/debug/herdr"   # plus the env -u … HERDR_SESSION=<name> prefix from herdr-fork-dev
+   H="$PWD/target/debug/momo"   # plus the env -u … HERDR_SESSION=<name> prefix from herdr-fork-dev
    $H plugin link "$PWD/plugins/<slug>"
    $H plugin list                 # check warnings
    $H plugin action list --plugin herdr-plus.<slug>
@@ -69,7 +69,7 @@ Set `min_herdr_version` to the oldest release whose CLI/API the plugin uses (che
    ```
 
    Plugin registration is global to the user for that binary's app dir. The debug binary uses the
-   `herdr-dev` app dir, so linking with it does not touch the user's installed plugins. Unlink at the
+   `momo-dev` app dir, so linking with it does not touch the user's installed plugins. Unlink at the
    end of the smoke test.
 3. Record commands, plugin log excerpts, and observed UI in the feature report.
 

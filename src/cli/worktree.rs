@@ -63,7 +63,7 @@ fn worktree_list(args: &[String]) -> std::io::Result<i32> {
         }
     }
     if workspace_id.is_some() && cwd.is_some() {
-        eprintln!("usage: herdr worktree list [--workspace ID | --cwd PATH] [--trust-repository]");
+        eprintln!("usage: momo worktree list [--workspace ID | --cwd PATH] [--trust-repository]");
         return Ok(2);
     }
 
@@ -156,7 +156,7 @@ fn worktree_create(args: &[String]) -> std::io::Result<i32> {
     }
     if workspace_id.is_some() && cwd.is_some() {
         eprintln!(
-            "usage: herdr worktree create [--workspace ID | --cwd PATH] [--branch NAME] [--base REF] [--path PATH] [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
+            "usage: momo worktree create [--workspace ID | --cwd PATH] [--branch NAME] [--base REF] [--path PATH] [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
         );
         return Ok(2);
     }
@@ -246,13 +246,13 @@ fn worktree_open(args: &[String]) -> std::io::Result<i32> {
     }
     if workspace_id.is_some() && cwd.is_some() {
         eprintln!(
-            "usage: herdr worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
+            "usage: momo worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
         );
         return Ok(2);
     }
     if path.is_some() == branch.is_some() {
         eprintln!(
-            "usage: herdr worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
+            "usage: momo worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
         );
         return Ok(2);
     }
@@ -322,7 +322,7 @@ fn worktree_remove(args: &[String]) -> std::io::Result<i32> {
 }
 
 const WORKTREE_REMOVE_USAGE: &str =
-    "usage: herdr worktree remove --workspace ID [--force] [--discard-nested] [--trust-repository]";
+    "usage: momo worktree remove --workspace ID [--force] [--discard-nested] [--trust-repository]";
 
 /// Check first, show exactly what will be discarded, then remove while
 /// acknowledging only those repositories. Work that appears between the two
@@ -393,7 +393,7 @@ fn worktree_removal_check(args: &[String]) -> std::io::Result<i32> {
         }
     }
     let Some(workspace_id) = workspace_id else {
-        eprintln!("usage: herdr worktree removal-check --workspace ID [--trust-repository]");
+        eprintln!("usage: momo worktree removal-check --workspace ID [--trust-repository]");
         return Ok(2);
     };
     super::print_response(&super::send_request(&Request {
@@ -406,18 +406,18 @@ fn worktree_removal_check(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn print_worktree_help() {
-    eprintln!("herdr worktree commands:");
-    eprintln!("  herdr worktree list [--workspace ID | --cwd PATH] [--trust-repository]");
+    eprintln!("momo worktree commands:");
+    eprintln!("  momo worktree list [--workspace ID | --cwd PATH] [--trust-repository]");
     eprintln!(
-        "  herdr worktree create [--workspace ID | --cwd PATH] [--branch NAME] [--base REF] [--path PATH] [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
+        "  momo worktree create [--workspace ID | --cwd PATH] [--branch NAME] [--base REF] [--path PATH] [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
     );
     eprintln!(
-        "  herdr worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
+        "  momo worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]"
     );
     eprintln!(
-        "  herdr worktree remove --workspace ID [--force] [--discard-nested] [--trust-repository]"
+        "  momo worktree remove --workspace ID [--force] [--discard-nested] [--trust-repository]"
     );
-    eprintln!("  herdr worktree removal-check --workspace ID [--trust-repository]");
+    eprintln!("  momo worktree removal-check --workspace ID [--trust-repository]");
 }
 
 fn normalize_path_arg(value: &str) -> std::io::Result<String> {

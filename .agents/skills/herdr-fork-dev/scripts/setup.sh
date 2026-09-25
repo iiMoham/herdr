@@ -53,5 +53,5 @@ done
 mkdir -p .local/prd
 
 cargo build
-echo "setup complete: $(target/debug/herdr --version)"
+echo "setup complete: $(target/debug/momo --version)"
 echo "remember: export PATH=/opt/homebrew/opt/rustup/bin:\$HOME/.cargo/bin:/opt/homebrew/bin:\$PATH"

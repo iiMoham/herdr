@@ -44,7 +44,7 @@ pub(crate) fn startup(role: &'static str) {
         subsystem = role,
         outcome = "started",
         pid = std::process::id(),
-        "herdr starting"
+        "momo starting"
     );
 }
 
@@ -54,7 +54,7 @@ pub(crate) fn shutdown(role: &'static str) {
         subsystem = role,
         outcome = "completed",
         pid = std::process::id(),
-        "herdr exiting"
+        "momo exiting"
     );
 }
 

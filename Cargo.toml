@@ -3,10 +3,10 @@ name = "herdr"
 version = "0.9.1"
 edition = "2021"
 build = "build.rs"
-description = "terminal workspace manager for AI coding agents"
+description = "MoMo: a terminal workspace manager for AI coding agents, based on herdr"
 license = "Apache-2.0"
-repository = "https://github.com/herdrdev/herdr"
-homepage = "https://herdr.dev"
+repository = "https://github.com/iiMoham/momo"
+homepage = "https://github.com/iiMoham/momo"
 keywords = ["terminal", "tui", "ai", "agents", "multiplexer"]
 categories = ["command-line-utilities"]
 include = [
@@ -19,6 +19,13 @@ include = [
     "LICENSE",
     "Cargo.toml",
 ]
+
+
+# MoMo installs next to herdr, so the binary gets its own name. The package
+# keeps herdr's name so the crate internals match upstream.
+[[bin]]
+name = "momo"
+path = "src/main.rs"
 
 [dependencies]
 base64 = "0.22.1"

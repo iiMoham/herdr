@@ -566,7 +566,7 @@ pub(crate) fn create_remote_ssh_config_dir(_control_socket_name: &str) -> std::i
     }
     Err(std::io::Error::new(
         std::io::ErrorKind::AlreadyExists,
-        "failed to create private herdr ssh config directory",
+        "failed to create private momo ssh config directory",
     ))
 }
 
@@ -2431,7 +2431,7 @@ fn show_desktop_notification_on_thread(
     ready_tx: std::sync::mpsc::SyncSender<std::io::Result<bool>>,
 ) {
     let class_name = wide_null("STATIC");
-    let window_name = wide_null("Herdr notifications");
+    let window_name = wide_null("MoMo notifications");
     let hwnd = unsafe {
         CreateWindowExW(
             0,
@@ -2462,11 +2462,11 @@ fn show_desktop_notification_on_thread(
     if !notification.hIcon.is_null() {
         notification.uFlags |= NIF_ICON;
     }
-    copy_wide_truncated(&mut notification.szTip, "Herdr");
+    copy_wide_truncated(&mut notification.szTip, "MoMo");
 
     if unsafe { Shell_NotifyIconW(NIM_ADD, &notification) } == 0 {
         let _ = ready_tx.send(Err(std::io::Error::other(
-            "failed to add Herdr notification-area icon",
+            "failed to add MoMo notification-area icon",
         )));
         unsafe {
             DestroyWindow(hwnd);
@@ -2484,7 +2484,7 @@ fn show_desktop_notification_on_thread(
             DestroyWindow(hwnd);
         }
         let _ = ready_tx.send(Err(std::io::Error::other(
-            "failed to show Herdr desktop notification",
+            "failed to show MoMo desktop notification",
         )));
         return;
     }
@@ -4310,7 +4310,7 @@ mod tests {
 
     #[test]
     fn scrollback_editor_argv_uses_editor_env_and_appends_path() {
-        let path = std::path::Path::new(r"C:\Users\User\AppData\Local\Temp\herdr scrollback.txt");
+        let path = std::path::Path::new(r"C:\Users\User\AppData\Local\Temp\momo scrollback.txt");
         let argv = super::scrollback_editor_argv_with_env(
             path,
             Some(r#""C:\Program Files\Microsoft VS Code\Code.exe" --wait"#),
