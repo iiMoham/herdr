@@ -910,6 +910,9 @@ impl<'de> Deserialize<'de> for PaneBordersConfig {
     }
 }
 
+pub const DEFAULT_ANIMATION_FPS: u16 = 24;
+pub const MAX_ANIMATION_FPS: u16 = 30;
+
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct UiConfig {
@@ -965,6 +968,10 @@ pub struct UiConfig {
     pub tab_bar_position: TabBarPositionConfig,
     /// Blank rows between the desktop tab row and the panes, at most 2. Default: 0.
     pub tab_bar_padding: u16,
+    /// Animate the pixel herd banner at the top of the sidebar. Default: true.
+    pub animation: bool,
+    /// Animation frames per second, 1-30. Default: 24.
+    pub animation_fps: u16,
     /// Ordered entries shown at the right edge of the desktop tab row. Empty by default.
     pub tab_bar_right: Vec<TabBarRightEntryConfig>,
     /// Text inserted between visible right-side tab bar entries. Default: one space.
@@ -1201,6 +1208,8 @@ impl Default for UiConfig {
             hide_tab_bar_when_single_tab: false,
             tab_bar_position: TabBarPositionConfig::Top,
             tab_bar_padding: 0,
+            animation: true,
+            animation_fps: DEFAULT_ANIMATION_FPS,
             tab_bar_right: Vec::new(),
             tab_bar_right_separator: " ".into(),
             window_title: super::window_title::default_window_title(),
@@ -1216,6 +1225,12 @@ impl Default for UiConfig {
 }
 
 impl UiConfig {
+    /// Animation frame interval, with `animation_fps` clamped to 1-30.
+    pub fn animation_frame_interval(&self) -> std::time::Duration {
+        let fps = self.animation_fps.clamp(1, MAX_ANIMATION_FPS);
+        std::time::Duration::from_micros(1_000_000 / u64::from(fps))
+    }
+
     pub fn mouse_scroll_lines(&self) -> usize {
         self.mouse_scroll_lines
             .map(NonZeroUsize::get)

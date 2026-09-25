@@ -248,6 +248,24 @@ pub(super) struct ShellRenderState<'a> {
     pub(super) reveal_navigation_workspace: &'a mut bool,
     pub(super) dragged_workspace_id: Option<&'a str>,
     pub(super) workspace_drop_indicator_row: Option<u16>,
+    /// Time into the herd banner animation, or `None` when the banner is off.
+    pub(super) animation_elapsed: Option<std::time::Duration>,
+}
+
+/// Every agent's status across all machines this client shows.
+fn herd_statuses(
+    endpoints: &[ClientShellEndpoint],
+    fallback: &ClientShellSnapshot,
+) -> Vec<crate::api::schema::AgentStatus> {
+    let mut statuses = endpoints
+        .iter()
+        .filter_map(|endpoint| endpoint.snapshot.as_deref())
+        .flat_map(|snapshot| snapshot.agents.iter().map(|agent| agent.agent_status))
+        .collect::<Vec<_>>();
+    if endpoints.iter().all(|endpoint| endpoint.snapshot.is_none()) {
+        statuses.extend(fallback.agents.iter().map(|agent| agent.agent_status));
+    }
+    statuses
 }
 
 pub(super) fn render_shell(
@@ -266,6 +284,29 @@ pub(super) fn render_shell(
             config,
             &mut hits,
         );
+    }
+    let mut layout = layout;
+    if layout.sidebar.width > 0 && !state.sidebar_collapsed {
+        if let Some(elapsed) = state
+            .animation_elapsed
+            .filter(|_| super::herd_banner::fits(layout.sidebar))
+        {
+            let banner = Rect::new(
+                layout.sidebar.x,
+                layout.sidebar.y,
+                layout.sidebar.width,
+                super::herd_banner::BANNER_ROWS,
+            );
+            let statuses = herd_statuses(state.endpoints, snapshot);
+            super::herd_banner::render(buffer, banner, elapsed, &statuses, &config.palette);
+            hits.herd_banner = banner;
+            layout.sidebar = Rect::new(
+                layout.sidebar.x,
+                layout.sidebar.y + super::herd_banner::BANNER_ROWS,
+                layout.sidebar.width,
+                layout.sidebar.height - super::herd_banner::BANNER_ROWS,
+            );
+        }
     }
     if layout.sidebar.width > 0 {
         if state.endpoints.len() > 1 {

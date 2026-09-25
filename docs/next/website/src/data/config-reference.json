@@ -1022,6 +1022,18 @@
           ]
         },
         {
+          "key": "ui.animation",
+          "type": "boolean",
+          "default": "true",
+          "description": "Animate the pixel herd banner at the top of the expanded sidebar: one sheep per agent colored by state, walking while agents work, sleeping when idle, with a blinking ! for agents that need you. Hidden when the sidebar is collapsed, shorter than 16 rows, or in the mobile layout."
+        },
+        {
+          "key": "ui.animation_fps",
+          "type": "integer",
+          "default": "24",
+          "description": "Frames per second for the herd banner, clamped to 1-30. Lower values use less CPU; motion speed does not depend on this value."
+        },
+        {
           "key": "ui.tab_bar_padding",
           "type": "integer",
           "default": "0",
