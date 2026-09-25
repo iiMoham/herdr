@@ -19,8 +19,9 @@ annotated tag message becomes the release notes shown by `momo update`.
 ```bash
 git switch herdr-plus && git pull
 just ci && just fork-plugins-test
-git tag -a momo-v0.9.1-momo.2 -m "### Added
-- …"
+# Write the notes to a file; --cleanup=verbatim keeps "### Added" headings,
+# which git would otherwise strip as comments.
+git tag -a momo-v0.9.1-momo.2 --cleanup=verbatim -F notes.md
 git push origin momo-v0.9.1-momo.2
 ```
 
