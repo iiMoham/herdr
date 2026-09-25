@@ -4958,6 +4958,59 @@ mod tests {
         assert!(STABLE_UPDATE_MANIFEST_URL.starts_with("https://github.com/iiMoham/momo/"));
     }
 
+    /// Runs MoMo's release script on fake assets and returns its `latest.json`.
+    #[cfg(unix)]
+    fn momo_release_script_manifest(release: u32) -> String {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let dir = std::env::temp_dir().join(format!(
+            "momo-release-script-{}-{release}-{}",
+            std::process::id(),
+            module_path!().replace("::", "-")
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for target in [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-x86_64",
+            "macos-aarch64",
+        ] {
+            std::fs::write(dir.join(format!("momo-{target}")), target).unwrap();
+        }
+        let status = std::process::Command::new("python3")
+            .arg(root.join("packaging/momo/release_manifest.py"))
+            .args([
+                "--tag",
+                &format!("momo-v{}-momo.{release}", crate::build_info::BASE_VERSION),
+            ])
+            .args(["--repo", "iiMoham/momo", "--assets-dir"])
+            .arg(&dir)
+            .arg("--source-root")
+            .arg(root)
+            .arg("--out-dir")
+            .arg(&dir)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "release_manifest.py failed");
+        let manifest = std::fs::read_to_string(dir.join("latest.json")).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        manifest
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn momo_release_script_output_serves_remote_installs() {
+        let manifest: RemoteUpdateManifest =
+            serde_json::from_str(&momo_release_script_manifest(6)).unwrap();
+        let label = format!("{}-momo.6", crate::build_info::BASE_VERSION);
+        let release = manifest.release_for_version(&label).expect("exact release");
+        assert_eq!(release.protocol, Some(CURRENT_PROTOCOL));
+        let asset = &release.assets["linux-aarch64"];
+        assert!(asset.url().ends_with("/momo-linux-aarch64"));
+        assert_eq!(asset.sha256().map(str::len), Some(64));
+    }
+
     #[test]
     fn remote_manifest_finds_the_exact_momo_release_for_this_client() {
         let manifest: RemoteUpdateManifest = serde_json::from_str(
