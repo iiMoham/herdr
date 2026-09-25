@@ -28,6 +28,12 @@ SKIP_FILES = {
     "src/build_info.rs",
     "src/brand.rs",
 }
+# Files inside SKIP_DIRS whose strings are only user-facing advice (which
+# command to run), with no compatibility markers.
+INCLUDE_FILES = {
+    "src/integration/registry.rs",
+    "src/integration/version.rs",
+}
 SKIP_DIRS = (
     "src/detect/manifests/",
     "src/integration/",
@@ -88,7 +94,7 @@ def rust_files(paths: list[str]):
         files = [path] if path.is_file() else sorted(path.rglob("*.rs"))
         for file in files:
             rel = file.relative_to(ROOT).as_posix()
-            if rel in SKIP_FILES or rel.startswith(SKIP_DIRS):
+            if rel in SKIP_FILES or (rel.startswith(SKIP_DIRS) and rel not in INCLUDE_FILES):
                 continue
             yield file, rel
 
