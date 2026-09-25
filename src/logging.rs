@@ -19,8 +19,8 @@ pub(crate) fn init_file_logging(file_name: &str) {
         return;
     };
 
-    let filter =
-        EnvFilter::try_from_env("HERDR_LOG").unwrap_or_else(|_| EnvFilter::new("herdr=info"));
+    let filter = EnvFilter::try_from_env("HERDR_LOG")
+        .unwrap_or_else(|_| EnvFilter::new(default_log_filter()));
 
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
@@ -28,6 +28,13 @@ pub(crate) fn init_file_logging(file_name: &str) {
         .with_ansi(false)
         .with_target(true)
         .try_init();
+}
+
+/// Log this crate's events at info. The directive names the compiled crate
+/// (`momo` for the MoMo binary), because tracing targets are module paths and
+/// a hardcoded `herdr=` directive would silently drop every event.
+fn default_log_filter() -> String {
+    format!("{}=info", env!("CARGO_CRATE_NAME"))
 }
 
 pub(crate) fn help_log_paths_summary() -> String {
@@ -559,6 +566,40 @@ fn rotated_log_path(path: &Path, index: usize) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Events logged from this crate under `filter`, captured in memory.
+    fn captured_with_filter(filter: &str) -> String {
+        #[derive(Clone)]
+        struct Capture(Arc<Mutex<Vec<u8>>>);
+        impl Write for Capture {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let writer = Capture(buffer.clone());
+        let subscriber = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::new(filter))
+            .with_writer(move || writer.clone())
+            .with_ansi(false)
+            .finish();
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(event = "app.startup", "log filter probe");
+        });
+        let bytes = buffer.lock().unwrap().clone();
+        String::from_utf8(bytes).unwrap()
+    }
+
+    #[test]
+    fn default_log_filter_keeps_this_crates_events() {
+        assert!(captured_with_filter(&default_log_filter()).contains("log filter probe"));
+        // The binary is `momo`, so herdr's old hardcoded directive drops everything.
+        assert!(!captured_with_filter("herdr=info").contains("log filter probe"));
+    }
 
     fn temp_log_path(name: &str) -> PathBuf {
         let unique = format!(
