@@ -238,4 +238,5 @@ default-config:
 # Fork-only: run the unit tests of every plugin under plugins/.
 fork-plugins-test:
     for tests in plugins/*/tests; do {{python}} -m unittest discover -s "$tests" || exit 1; done
+    {{python}} -m unittest discover -s packaging/momo/tests
     {{python}} scripts/momo_rebrand.py --check

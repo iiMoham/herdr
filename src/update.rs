@@ -3641,6 +3641,65 @@ mod tests {
             .is_none());
     }
 
+    /// Runs MoMo's release script on fake assets and returns its `latest.json`.
+    #[cfg(unix)]
+    fn momo_release_script_manifest(release: u32) -> String {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let dir = std::env::temp_dir().join(format!(
+            "momo-release-script-{}-{release}-{}",
+            std::process::id(),
+            module_path!().replace("::", "-")
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for target in [
+            "linux-x86_64",
+            "linux-aarch64",
+            "macos-x86_64",
+            "macos-aarch64",
+        ] {
+            std::fs::write(dir.join(format!("momo-{target}")), target).unwrap();
+        }
+        let status = std::process::Command::new("python3")
+            .arg(root.join("packaging/momo/release_manifest.py"))
+            .args([
+                "--tag",
+                &format!("momo-v{}-momo.{release}", crate::build_info::BASE_VERSION),
+            ])
+            .args(["--repo", "iiMoham/momo", "--assets-dir"])
+            .arg(&dir)
+            .arg("--source-root")
+            .arg(root)
+            .arg("--out-dir")
+            .arg(&dir)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "release_manifest.py failed");
+        let manifest = std::fs::read_to_string(dir.join("latest.json")).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        manifest
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn momo_release_script_output_drives_the_updater() {
+        let manifest: UpdateManifest =
+            serde_json::from_str(&momo_release_script_manifest(4)).unwrap();
+        let release = release_info_from_manifest(&manifest)
+            .unwrap()
+            .expect("release 4 is newer than a development build");
+        assert_eq!(
+            release.label(),
+            format!("{}-momo.4", crate::build_info::BASE_VERSION)
+        );
+        let (os, arch) = platform_target();
+        assert!(release
+            .download_url
+            .ends_with(&format!("/momo-v{}/momo-{os}-{arch}", release.label())));
+        assert_eq!(release.sha256.as_deref().map(str::len), Some(64));
+    }
+
     #[test]
     fn momo_rejects_the_preview_channel() {
         assert_eq!(
