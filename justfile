@@ -85,7 +85,7 @@ build:
 
 # Non-gating full-render scaling profile for background workspaces and active panes
 bench-render-scale:
-    cargo test --release --locked --bin herdr render_scale_profile -- --ignored --nocapture --test-threads=1
+    cargo test --release --locked --bin momo render_scale_profile -- --ignored --nocapture --test-threads=1
 
 # ~3-5 minute CPU comparison; downloads stable unless HERDR_PERF_BASELINE_BIN is set
 bench-release-smoke:
@@ -238,3 +238,4 @@ default-config:
 # Fork-only: run the unit tests of every plugin under plugins/.
 fork-plugins-test:
     for tests in plugins/*/tests; do {{python}} -m unittest discover -s "$tests" || exit 1; done
+    {{python}} scripts/momo_rebrand.py --check

@@ -913,7 +913,7 @@ fn show_desktop_notification_with_command(
     }
 
     let mut cmd = command("notify-send");
-    cmd.arg("--app-name").arg("Herdr").arg("--").arg(title);
+    cmd.arg("--app-name").arg("MoMo").arg("--").arg(title);
     if let Some(body) = body.filter(|body| !body.is_empty()) {
         cmd.arg(body);
     }

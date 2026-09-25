@@ -448,7 +448,7 @@ mod tests {
         std::fs::create_dir_all(path).unwrap();
         git(path, &["init", "--quiet"]);
         git(path, &["config", "user.email", "herdr@example.invalid"]);
-        git(path, &["config", "user.name", "Herdr Test"]);
+        git(path, &["config", "user.name", "MoMo Test"]);
     }
 
     fn commit(repo: &Path, file: &str) {

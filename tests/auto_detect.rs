@@ -105,7 +105,7 @@ fn spawn_server(
         })
         .unwrap();
 
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_momo"));
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
@@ -149,7 +149,7 @@ fn spawn_herdr_auto(
         })
         .unwrap();
 
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_momo"));
     // No subcommand → auto-detect launch.
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
@@ -200,7 +200,7 @@ fn wait_for_log_contains(path: &Path, needle: &str, timeout: Duration) {
 }
 
 fn run_cli(socket_path: &Path, args: &[&str]) -> std::process::Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_momo"));
     command.args(args);
     command.env("HERDR_SOCKET_PATH", socket_path);
     command.output().unwrap()
@@ -249,13 +249,13 @@ fn session_attach_without_terminal_leaves_no_session() {
     register_runtime_dir(&runtime_dir);
     let name = "no-tty";
     let app_dir = if cfg!(debug_assertions) {
-        "herdr-dev"
+        "momo-dev"
     } else {
         "herdr"
     };
     let session_dir = config_home.join(app_dir).join("sessions").join(name);
     let run = |args: &[&str]| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_momo"));
         command
             .args(args)
             .env("XDG_CONFIG_HOME", &config_home)
@@ -573,7 +573,7 @@ fn auto_detect_default_socket_path_from_config_dir() {
     // Don't set HERDR_SOCKET_PATH or HERDR_CLIENT_SOCKET_PATH.
     // The default paths should come from the app config directory, not XDG_RUNTIME_DIR.
     let app_dir_name = if cfg!(debug_assertions) {
-        "herdr-dev"
+        "momo-dev"
     } else {
         "herdr"
     };
@@ -599,7 +599,7 @@ fn auto_detect_default_socket_path_from_config_dir() {
         })
         .unwrap();
 
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_momo"));
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", &config_home);
     cmd.env("XDG_RUNTIME_DIR", &runtime_dir);
@@ -652,7 +652,7 @@ fn auto_detect_writes_client_and_server_logs_to_separate_files() {
     wait_for_socket(&client_socket, Duration::from_secs(10));
 
     let app_dir_name = if cfg!(debug_assertions) {
-        "herdr-dev"
+        "momo-dev"
     } else {
         "herdr"
     };
@@ -675,7 +675,7 @@ fn auto_detect_writes_client_and_server_logs_to_separate_files() {
     let monolith_content = fs::read_to_string(&monolith_log).unwrap_or_default();
     assert!(
         !monolith_content.contains("subsystem=\"client\""),
-        "persistent client logs should not land in herdr.log: {monolith_content}"
+        "persistent client logs should not land in momo.log: {monolith_content}"
     );
 
     cleanup_spawned_herdr(spawned, base);
@@ -708,7 +708,7 @@ fn auto_detect_respects_nested_guard_before_auto_attach() {
         .map(|workspaces| workspaces.len())
         .unwrap_or(0);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_herdr"))
+    let output = Command::new(env!("CARGO_BIN_EXE_momo"))
         .env("XDG_CONFIG_HOME", &config_home)
         .env("XDG_RUNTIME_DIR", &runtime_dir)
         .env("HERDR_SOCKET_PATH", &api_socket)
@@ -723,7 +723,7 @@ fn auto_detect_respects_nested_guard_before_auto_attach() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("nested herdr is disabled by default"),
+        stderr.contains("nested momo is disabled by default"),
         "stderr should mention nested-launch guard: {stderr}"
     );
 

@@ -1,3 +1,5 @@
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use tracing::warn;
@@ -21,9 +23,9 @@ const KNOWN_TOP_LEVEL_CONFIG_KEYS: &[&str] = &[
 
 pub fn app_dir_name() -> &'static str {
     if cfg!(debug_assertions) {
-        "herdr-dev"
+        crate::brand::DEV_APP_DIR
     } else {
-        "herdr"
+        crate::brand::APP_DIR
     }
 }
 
@@ -32,6 +34,56 @@ pub fn config_dir() -> PathBuf {
         return PathBuf::from(dir).join(app_dir_name());
     }
     platform_config_dir()
+}
+
+/// herdr's app directory for this build flavor, next to MoMo's.
+fn upstream_app_dir_name() -> &'static str {
+    if cfg!(debug_assertions) {
+        "herdr-dev"
+    } else {
+        crate::brand::UPSTREAM_APP_DIR
+    }
+}
+
+/// On MoMo's first start, copy the user's herdr config so their keys, theme,
+/// and agent settings carry over. Runs only when MoMo has no config yet and no
+/// explicit config path is set. Returns the imported source path.
+pub fn import_upstream_config_once() -> Option<PathBuf> {
+    if std::env::var_os(CONFIG_PATH_ENV_VAR).is_some() {
+        return None;
+    }
+    let target = config_path();
+    let source = target
+        .parent()?
+        .parent()?
+        .join(upstream_app_dir_name())
+        .join("config.toml");
+    match import_config_file(&source, &target) {
+        Ok(imported) => imported.then_some(source),
+        Err(err) => {
+            warn!(err = %err, source = %source.display(), "could not import momo config");
+            None
+        }
+    }
+}
+
+fn import_config_file(source: &Path, target: &Path) -> io::Result<bool> {
+    if target.exists() || !source.is_file() {
+        return Ok(false);
+    }
+    let content = fs::read_to_string(source)?;
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(
+        target,
+        format!(
+            "# Imported from {} by {} on first start. Edit freely; herdr's copy is untouched.\n{content}",
+            source.display(),
+            crate::brand::PRODUCT_NAME,
+        ),
+    )?;
+    Ok(true)
 }
 
 pub fn state_dir() -> PathBuf {
@@ -239,7 +291,7 @@ pub fn config_diagnostic_summary(diagnostics: &[String]) -> Option<String> {
         ""
     };
 
-    Some(format!("{target}{impact}; herdr config check"))
+    Some(format!("{target}{impact}; momo config check"))
 }
 
 pub fn load_live_config() -> Result<LoadedConfig, Vec<String>> {
@@ -752,6 +804,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn momo_imports_the_herdr_config_once_and_never_overwrites() {
+        let root = std::env::temp_dir().join(format!("momo-import-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let source = root.join("herdr/config.toml");
+        let target = root.join("momo/config.toml");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+
+        // Nothing to import yet.
+        assert!(!import_config_file(&source, &target).unwrap());
+        assert!(!target.exists());
+
+        fs::write(&source, "[theme]\nname = \"dracula\"\n").unwrap();
+        assert!(import_config_file(&source, &target).unwrap());
+        let imported = fs::read_to_string(&target).unwrap();
+        assert!(imported.starts_with("# Imported from "), "{imported}");
+        assert!(imported.ends_with("[theme]\nname = \"dracula\"\n"));
+        let parsed: Config = toml::from_str(&imported).unwrap();
+        assert_eq!(parsed.theme.name.as_deref(), Some("dracula"));
+
+        // A later herdr change never reaches an existing MoMo config.
+        fs::write(&source, "[theme]\nname = \"nord\"\n").unwrap();
+        assert!(!import_config_file(&source, &target).unwrap());
+        assert_eq!(fs::read_to_string(&target).unwrap(), imported);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn momo_uses_its_own_app_directory() {
+        assert_eq!(app_dir_name(), "momo-dev");
+        assert_eq!(upstream_app_dir_name(), "herdr-dev");
+    }
+
+    #[test]
     fn upsert_top_level_bool_replaces_existing_value() {
         let content = "onboarding = true\n[keys]\nprefix = \"ctrl+b\"\n";
         let updated = upsert_top_level_bool(content, "onboarding", false);
@@ -788,7 +873,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml; herdr config check")
+            Some("config.toml; momo config check")
         );
     }
 
@@ -801,7 +886,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml has unknown keys; herdr config check")
+            Some("config.toml has unknown keys; momo config check")
         );
     }
 
@@ -814,7 +899,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml; herdr config check")
+            Some("config.toml; momo config check")
         );
     }
 
@@ -827,7 +912,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml invalid; using defaults; herdr config check")
+            Some("config.toml invalid; using defaults; momo config check")
         );
     }
 
@@ -836,14 +921,14 @@ mod tests {
         let startup = vec!["config read error: permission denied; using defaults".to_string()];
         assert_eq!(
             config_diagnostic_summary(&startup).as_deref(),
-            Some("config.toml unreadable; using defaults; herdr config check")
+            Some("config.toml unreadable; using defaults; momo config check")
         );
 
         let reload =
             vec!["config read error: permission denied; keeping current config".to_string()];
         assert_eq!(
             config_diagnostic_summary(&reload).as_deref(),
-            Some("config.toml unreadable; keeping current config; herdr config check")
+            Some("config.toml unreadable; keeping current config; momo config check")
         );
     }
 
@@ -856,7 +941,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml invalid; keeping current config; herdr config check")
+            Some("config.toml invalid; keeping current config; momo config check")
         );
     }
 

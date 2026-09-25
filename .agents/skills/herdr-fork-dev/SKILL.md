@@ -47,10 +47,10 @@ export PATH=/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:/opt/homebrew/bin:$PAT
 ## Build
 
 ```bash
-cargo build              # debug binary at target/debug/herdr
+cargo build              # debug binary at target/debug/momo
 ```
 
-Debug builds use the app dir name `herdr-dev` (`src/config/io.rs::app_dir_name`), so their config,
+Debug builds use the app dir name `momo-dev` (`src/config/io.rs::app_dir_name`), so their config,
 state, and default socket are separate from the user's installed `herdr` (0.9.x in `~/.local/bin`).
 
 ## Test ladder
@@ -69,7 +69,7 @@ Iterate narrow, finish wide:
 
 To prove a test catches the bug, temporarily break the fix and confirm the test fails. Restore with
 `git checkout -- <file>` or edit it back, then `touch <file>`. Never restore with `cp`/`mv` of a backup:
-the older mtime makes Cargo keep the broken artifacts, so later test runs and `target/debug/herdr`
+the older mtime makes Cargo keep the broken artifacts, so later test runs and `target/debug/momo`
 silently use the mutated code.
 
 Never skip, `#[ignore]`, or delete a test to get green. Never edit frozen compatibility fixtures
@@ -113,13 +113,13 @@ Use the `herdr-throwaway-repro` skill. Fork-specific rules on top of it:
 - The agent usually runs inside the user's installed herdr (`HERDR_ENV=1`). Never address the
   default session and never stop its server.
 - Test the checkout build, not the installed binary. Launch the disposable session with
-  `target/debug/herdr` (absolute path) and address it with the same binary:
+  `target/debug/momo` (absolute path) and address it with the same binary:
 
   ```bash
   env -u HERDR_SOCKET_PATH -u HERDR_CLIENT_SOCKET_PATH -u HERDR_SESSION \
       -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID -u HERDR_PANE_ID \
       HERDR_CONFIG_PATH=/var/tmp/<repro-dir>/config.toml \
-      "$PWD/target/debug/herdr" --session <unique-name>
+      "$PWD/target/debug/momo" --session <unique-name>
   ```
 
 - Put the test config (with `[experimental] allow_nested = true` plus the feature's keys) in the
@@ -129,7 +129,7 @@ Use the `herdr-throwaway-repro` skill. Fork-specific rules on top of it:
 - Drive the nested TUI from the parent with `herdr pane send-keys <outer> ctrl+b` then
   `herdr pane send-text <outer> X`. Wait about a second after `esc` before the next key: an Esc
   followed quickly by `ctrl+b` is parsed as Alt+Ctrl+B and the prefix is lost.
-- Before launching, rebuild with `cargo build` and check `target/debug/herdr` is newer than your last
+- Before launching, rebuild with `cargo build` and check `target/debug/momo` is newer than your last
   source edit (`stat -f %Sm`).
 - Record binary path, `herdr --version` output, commands run, and what was observed.
 - Clean up: stop only the disposable named session's server, then close only the outer pane you created.
@@ -167,3 +167,10 @@ cargo build && just ci
 
 Resolve conflicts in favor of upstream structure, then re-apply fork behavior. Re-run the affected
 features' tests and note the upstream commit in `.local/prd/STATUS.md`.
+
+The fork ships as **MoMo** (binary `momo`, app dirs `momo`/`momo-dev`, identity in `src/brand.rs`).
+User-facing text is rebranded by `scripts/momo_rebrand.py`, which is idempotent. When a merge
+conflicts only on rebranded strings, take upstream's side of those strings, then run
+`python3 scripts/momo_rebrand.py` and review its diff. `just fork-plugins-test` fails while any
+string still needs the rebrand. The script never touches compatibility identifiers (`HERDR_*`,
+hook sources, file and socket names, `src/integration/`, `src/api/schema`, `src/protocol/`).

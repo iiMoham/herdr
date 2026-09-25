@@ -61,7 +61,7 @@ fn banner_sits_above_the_sidebar_and_clicks_still_hit_the_right_rows() {
         state.hits.herd_banner,
         Rect::new(0, 0, state.hits.herd_banner.width, 4)
     );
-    assert!(frame_rows(&frame)[3].contains("herdr+  ● 1 working"));
+    assert!(frame_rows(&frame)[3].contains("MoMo  ● 1 working"));
     let first_workspace = state.hits.workspaces[0].rect;
     assert_eq!(first_workspace.y, plain_first_workspace.y + 4);
 

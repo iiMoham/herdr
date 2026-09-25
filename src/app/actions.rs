@@ -3993,7 +3993,7 @@ mod tests {
 
         let updates = state.handle_app_event(AppEvent::UpdateReady {
             version: "0.5.0".into(),
-            install_command: "herdr update".into(),
+            install_command: "momo update".into(),
         });
 
         assert!(updates.is_empty());
@@ -4005,7 +4005,7 @@ mod tests {
         assert_eq!(toast.title, "v0.5.0 available");
         assert_eq!(
             toast.context,
-            "detach, run `herdr update`, then run Herdr again to reconnect"
+            "detach, run `momo update`, then run MoMo again to reconnect"
         );
     }
 
@@ -4026,7 +4026,7 @@ mod tests {
         let toast = state.toast.as_ref().expect("update toast");
         assert_eq!(
             toast.context,
-            "detach, run `brew update && brew upgrade herdr`, then run Herdr again to reconnect"
+            "detach, run `brew update && brew upgrade herdr`, then run MoMo again to reconnect"
         );
     }
 

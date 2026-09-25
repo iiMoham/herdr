@@ -26,7 +26,7 @@ fn notification_show(args: &[String]) -> std::io::Result<i32> {
         Ok(params) => params,
         Err(NotificationShowArgError::Usage) => {
             eprintln!(
-                "usage: herdr notification show <title> [--body TEXT] [--position top-left|top-right|bottom-left|bottom-right] [--sound none|done|request]"
+                "usage: momo notification show <title> [--body TEXT] [--position top-left|top-right|bottom-left|bottom-right] [--sound none|done|request]"
             );
             return Ok(2);
         }
@@ -133,15 +133,15 @@ fn parse_notification_sound(
 }
 
 fn print_notification_help() {
-    eprintln!("herdr notification commands:");
+    eprintln!("momo notification commands:");
     eprintln!(
-        "  herdr notification show <title> [--body TEXT] [--position top-left|top-right|bottom-left|bottom-right] [--sound none|done|request]"
+        "  momo notification show <title> [--body TEXT] [--position top-left|top-right|bottom-left|bottom-right] [--sound none|done|request]"
     );
     eprintln!("  {NOTIFICATION_OPEN_TARGET_USAGE}");
 }
 
 const NOTIFICATION_OPEN_TARGET_USAGE: &str =
-    "herdr notification open-target --client-socket PATH --token TOKEN";
+    "momo notification open-target --client-socket PATH --token TOKEN";
 
 /// Parsed `open-target` arguments: (client socket, token).
 fn parse_notification_open_target_args(
@@ -180,7 +180,7 @@ fn notification_open_target(args: &[String]) -> std::io::Result<i32> {
         Ok(()) => Ok(0),
         Err(err) => {
             eprintln!(
-                "could not reach the Herdr client at {}: {err}",
+                "could not reach the MoMo client at {}: {err}",
                 socket.display()
             );
             Ok(1)

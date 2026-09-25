@@ -269,7 +269,7 @@ fn half_block(top: Option<Color>, bottom: Option<Color>) -> HerdCell {
     }
 }
 
-/// `herdr+  ● 2 working  ▲ 1 needs you`, a compact `herdr+  ● 2  ▲ 1` when that
+/// `MoMo  ● 2 working  ▲ 1 needs you`, a compact `MoMo  ● 2  ▲ 1` when that
 /// does not fit in `width` columns, or a quiet summary.
 pub(super) fn status_line(
     statuses: &[AgentStatus],
@@ -298,7 +298,7 @@ fn status_segments(
         count(AgentStatus::Done),
     );
     let mut segments = vec![(
-        " herdr+".to_owned(),
+        format!(" {}", crate::brand::PRODUCT_NAME),
         Style::default()
             .fg(palette.accent)
             .add_modifier(Modifier::BOLD),
@@ -503,10 +503,10 @@ mod tests {
                 AgentStatus::Working,
                 AgentStatus::Blocked
             ]),
-            " herdr+  ● 2 working  ▲ 1 needs you"
+            " MoMo  ● 2 working  ▲ 1 needs you"
         );
-        assert_eq!(line(&[AgentStatus::Done]), " herdr+  ✓ 1 done");
-        assert_eq!(line(&[AgentStatus::Idle]), " herdr+  · all quiet");
+        assert_eq!(line(&[AgentStatus::Done]), " MoMo  ✓ 1 done");
+        assert_eq!(line(&[AgentStatus::Idle]), " MoMo  · all quiet");
 
         // A narrow sidebar keeps every count visible instead of cutting words.
         let narrow = status_line(
@@ -521,7 +521,7 @@ mod tests {
         .into_iter()
         .map(|(text, _)| text)
         .collect::<String>();
-        assert_eq!(narrow, " herdr+  ● 2  ▲ 1");
+        assert_eq!(narrow, " MoMo  ● 2  ▲ 1");
     }
 
     #[test]
