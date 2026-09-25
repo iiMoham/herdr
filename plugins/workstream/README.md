@@ -1,4 +1,4 @@
-# Workstream plugin (`herdr-plus.workstream`)
+# Workstream plugin (`momo.workstream`)
 
 Two shortcuts for worktree-based tasks:
 
@@ -14,39 +14,39 @@ cancels. It refuses to run on a repository's main checkout.
 
 ## Requirements
 
-- herdr 0.9.1 or newer from this fork (finish uses `worktree removal-check` and `--discard-nested`).
+- MoMo (finish uses `worktree removal-check` and `--discard-nested`, which upstream herdr lacks).
 - `python3` (3.9 or newer, standard library only) and `git` on the server's `PATH`.
 - Linux or macOS.
 
 ## Install
 
 ```bash
-herdr plugin link /path/to/herdr/plugins/workstream
-herdr plugin list          # confirm it is enabled and has no warnings
+momo plugin link /path/to/momo/plugins/workstream
+momo plugin list          # confirm it is enabled and has no warnings
 ```
 
-Bind the actions in `~/.config/herdr/config.toml`. These keys are unbound by default:
+Bind the actions in `~/.config/momo/config.toml`. These keys are unbound by default:
 
 ```toml
 [[keys.command]]
 key = "prefix+shift+b"
 type = "plugin_action"
-command = "herdr-plus.workstream.start"
+command = "momo.workstream.start"
 description = "begin workstream"
 
 [[keys.command]]
 key = "prefix+shift+f"
 type = "plugin_action"
-command = "herdr-plus.workstream.finish"
+command = "momo.workstream.finish"
 description = "finish workstream"
 ```
 
-Then reload config (menu → reload config, or `herdr server reload-config`). Both actions are also
-available from `herdr plugin action invoke herdr-plus.workstream.start` (or `.finish`).
+Then reload config (menu → reload config, or `momo server reload-config`). Both actions are also
+available from `momo plugin action invoke momo.workstream.start` (or `.finish`).
 
 ## Layout recipe (optional)
 
-Create `config.json` in the folder printed by `herdr plugin config-dir herdr-plus.workstream`:
+Create `config.json` in the folder printed by `momo plugin config-dir momo.workstream`:
 
 ```json
 {

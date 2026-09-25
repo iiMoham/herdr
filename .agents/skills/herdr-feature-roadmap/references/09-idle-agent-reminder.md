@@ -10,7 +10,7 @@ is cold and resuming costs more.
 
 ## Behavior
 
-Plugin `herdr-plus.idle-reminder` in `plugins/idle-reminder/`:
+Plugin `momo.idle-reminder` in `plugins/idle-reminder/`:
 
 - Tracks when each agent pane last entered `idle` or `done`, and clears when it leaves those
   states or the pane closes.

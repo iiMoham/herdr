@@ -34,7 +34,7 @@ plugins/<slug>/
   tests/                # script-level tests (see below)
 ```
 
-Plugin ids use the `herdr-plus.<slug>` namespace, for example `herdr-plus.idle-reminder`.
+Plugin ids use the `momo.<slug>` namespace, for example `momo.idle-reminder`.
 Set `min_herdr_version` to the oldest release whose CLI/API the plugin uses (check
 `docs/next/.../cli-reference.mdx` and `git log -S` for when a command appeared). Declare `platforms`.
 
@@ -63,9 +63,9 @@ Set `min_herdr_version` to the oldest release whose CLI/API the plugin uses (che
    H="$PWD/target/debug/momo"   # plus the env -u … HERDR_SESSION=<name> prefix from herdr-fork-dev
    $H plugin link "$PWD/plugins/<slug>"
    $H plugin list                 # check warnings
-   $H plugin action list --plugin herdr-plus.<slug>
-   $H plugin action invoke herdr-plus.<slug>.<action>
-   $H plugin log list --plugin herdr-plus.<slug>
+   $H plugin action list --plugin momo.<slug>
+   $H plugin action invoke momo.<slug>.<action>
+   $H plugin log list --plugin momo.<slug>
    ```
 
    Plugin registration is global to the user for that binary's app dir. The debug binary uses the

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Workstream plugin for herdr: start a task in a new worktree, finish it safely.
+"""Workstream plugin for MoMo: start a task in a new worktree, finish it safely.
 
 Actions have no terminal, so `launch <start|finish>` opens this plugin's popup
 entrypoint, and `start` / `finish` run inside that popup where they can ask
@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 
-PLUGIN_ID = "herdr-plus.workstream"
+PLUGIN_ID = "momo.workstream"
 VALID_DIRECTIONS = ("right", "down")
 STATUS_PREVIEW_LINES = 10
 NESTED_REFUSALS = (
@@ -136,7 +136,7 @@ def parse_json(text):
 
 def herdr(args):
     """Run the herdr CLI; returns (ok, parsed JSON or None, raw text)."""
-    binary = os.environ.get("HERDR_BIN_PATH") or "herdr"
+    binary = os.environ.get("HERDR_BIN_PATH") or "momo"
     completed = subprocess.run([binary, *args], capture_output=True, text=True)
     raw = completed.stdout if completed.returncode == 0 else completed.stderr
     return (
@@ -149,7 +149,7 @@ def herdr(args):
 def error_of(payload, raw):
     if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
         return payload["error"].get("code"), payload["error"].get("message", raw.strip())
-    return None, raw.strip() or "herdr command failed"
+    return None, raw.strip() or "momo command failed"
 
 
 def valid_branch(name, cwd):
@@ -255,7 +255,7 @@ def start():
     root_pane = ((payload or {}).get("result") or {}).get("root_pane") or {}
     root_id = root_pane.get("pane_id")
     if not root_id:
-        return fail("herdr did not report the new workspace's pane")
+        return fail("MoMo did not report the new workspace's pane")
 
     for kind, value in layout_steps(config):
         if kind == "run_root":
