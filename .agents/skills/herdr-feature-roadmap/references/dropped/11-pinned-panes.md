@@ -8,10 +8,10 @@ With many agents and panes, users want a few "favorite" panes to stand out and b
 
 ## Behavior
 
-Plugin `herdr-plus.pinned-panes` in `plugins/pinned-panes/`:
+Plugin `momo.pinned-panes` in `plugins/pinned-panes/`:
 
 - Action `toggle` (context: pane): pins/unpins the focused pane by reporting pane metadata
-  `herdr pane report-metadata <pane> --source herdr-plus.pinned-panes --token pin=★` or
+  `herdr pane report-metadata <pane> --source momo.pinned-panes --token pin=★` or
   `--clear-token pin`.
 - Pins are persisted in `$HERDR_PLUGIN_STATE_DIR/pins.json` (by pane id). A startup hook re-reports
   metadata for pins whose panes still exist after restore; a `pane.closed` hook drops the pin.

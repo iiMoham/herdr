@@ -11,7 +11,7 @@ script this in dotfiles today.
 
 ## Behavior
 
-Plugin `herdr-plus.workstream` in `plugins/workstream/`:
+Plugin `momo.workstream` in `plugins/workstream/`:
 
 - Action `start` (context: workspace). Opens a popup pane (`placement = "popup"`) that asks for a
   branch name (and optional base ref), then runs
