@@ -46,7 +46,9 @@ STRING = re.compile(r'r(#*)"(?:.|\n)*?"\1|"(?:[^"\\\n]|\\.|\\\n)*"')
 
 # `herdr` used as a command or product word: followed by a space and a word,
 # an option, or a placeholder; or quoted in backticks.
-COMMAND = re.compile(r"(?<![\w:/.$-])herdr(?= (?:[a-z<\[{(`'\"-]|\\\"))")
+# `\n`/`\t` escapes count as boundaries: "\nherdr pane" is a command too.
+BOUNDARY = r"(?:(?<![\w:/.$-])|(?<=\\n)|(?<=\\t))"
+COMMAND = re.compile(BOUNDARY + r"herdr(?= (?:[a-z<\[{(`'\"-]|\\\"))")
 BACKTICK = re.compile(r"`herdr`")
 TRAILING_PROSE = re.compile(
     r"\b(open|in|inside|restart|start|quit|exit|from|to|run|of|with|by|use|using|launch) herdr(?=[ .,;:!?)]|$|\\n)"
@@ -54,7 +56,7 @@ TRAILING_PROSE = re.compile(
 # Message prefixes (`herdr: failed …`) and the help header (`herdr — …`).
 # Hook sources like `herdr:claude` have no space after the colon and stay.
 MESSAGE_PREFIX = re.compile(r'^"herdr(?=: | — )')
-PRODUCT = re.compile(r"(?<![\w-])Herdr(?![\w-])")
+PRODUCT = re.compile(r"(?:(?<![\w-])|(?<=\\n)|(?<=\\t))Herdr(?![\w-])")
 PRODUCT_POSSESSIVE = re.compile(r"(?<![\w-])Herdr's")
 
 
