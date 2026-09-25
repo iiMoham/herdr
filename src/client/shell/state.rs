@@ -21,6 +21,8 @@ pub(crate) struct ClientShellConfig {
     pub(super) mobile_width_threshold: u16,
     pub(super) tab_bar_position: TabBarPositionConfig,
     pub(super) tab_bar_padding: u16,
+    pub(super) animation: bool,
+    pub(super) animation_frame_interval: std::time::Duration,
     pub(super) hide_tab_bar_when_single_tab: bool,
     pub(super) spaces: SpacesSidebarConfig,
     pub(super) agents: crate::config::AgentsSidebarConfig,
@@ -85,6 +87,8 @@ pub(super) enum ClientMobileTarget {
 
 #[derive(Default)]
 pub(super) struct ShellHitMap {
+    /// Where the animated herd banner was drawn; empty when hidden.
+    pub(super) herd_banner: Rect,
     pub(super) machines: Vec<MachineHit>,
     pub(super) workspaces: Vec<WorkspaceHit>,
     pub(super) workspace_body: Rect,
@@ -913,6 +917,10 @@ pub(crate) struct ClientShellState {
     pub(super) navigate_workspace_id: Option<WorkspaceNavigationTarget>,
     pub(super) pending_workspace_highlight: Option<PendingWorkspaceHighlight>,
     pub(super) reveal_navigation_workspace: bool,
+    /// Animation clock: frames derive from time since this instant.
+    pub(super) animation_epoch: std::time::Instant,
+    pub(super) animation_elapsed: std::time::Duration,
+    pub(super) animation_frame: u64,
     pub(super) overlay: Option<ClientShellOverlay>,
     pub(super) previous_pane_id: Option<String>,
     pub(super) pane_mouse_gesture: Option<ClientPaneMouseGesture>,
@@ -1114,6 +1122,9 @@ impl ClientShellState {
             pending_notifications: Vec::new(),
             visible_notification: None,
             notification_clicks: VecDeque::new(),
+            animation_epoch: std::time::Instant::now(),
+            animation_elapsed: std::time::Duration::ZERO,
+            animation_frame: 0,
             next_notification_click: 1,
             queued_notifications: VecDeque::new(),
             endpoint_notice_seen: HashSet::new(),
@@ -1886,9 +1897,40 @@ impl ClientShellState {
         self.selection_autoscroll_deadline
             .into_iter()
             .chain(self.selection_repaint_deadline)
+            .chain(self.next_animation_frame_deadline())
             .min()
             .map(|deadline| deadline.saturating_duration_since(now).min(default))
             .unwrap_or(default)
+    }
+
+    /// The herd banner animates only while enabled and actually on screen.
+    fn animation_active(&self) -> bool {
+        self.config.animation && !self.hits.herd_banner.is_empty()
+    }
+
+    fn next_animation_frame_deadline(&self) -> Option<std::time::Instant> {
+        if !self.animation_active() {
+            return None;
+        }
+        let interval = self.config.animation_frame_interval;
+        let next = interval.checked_mul(u32::try_from(self.animation_frame + 1).ok()?)?;
+        self.animation_epoch.checked_add(next)
+    }
+
+    /// Advance the animation clock; true when a new frame should be drawn.
+    pub(crate) fn tick_animation(&mut self, now: std::time::Instant) -> bool {
+        if !self.animation_active() {
+            return false;
+        }
+        let elapsed = now.saturating_duration_since(self.animation_epoch);
+        let interval = self.config.animation_frame_interval.as_micros().max(1);
+        let frame = u64::try_from(elapsed.as_micros() / interval).unwrap_or(u64::MAX);
+        if frame == self.animation_frame {
+            return false;
+        }
+        self.animation_frame = frame;
+        self.animation_elapsed = elapsed;
+        true
     }
 
     pub(crate) fn invalidate_pane_surface(&mut self) {

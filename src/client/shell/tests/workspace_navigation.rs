@@ -151,6 +151,8 @@ fn navigation_highlights_only_the_preview_and_activates_on_enter() {
     for (compact, cols) in [(true, 100), (false, 100), (false, 44)] {
         for terminal_theme in [false, true] {
             let (mut state, remote) = navigation_state(workspaces(2));
+            // Measures sidebar rows without the herd banner above them.
+            state.config.animation = false;
             state.sidebar_collapsed = compact;
             if terminal_theme {
                 state.config.palette = Palette::terminal();

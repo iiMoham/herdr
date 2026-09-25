@@ -2,7 +2,9 @@ use super::*;
 
 #[test]
 fn mouse_hits_use_stable_workspace_tab_and_pane_ids() {
-    let config = ClientShellConfig::from_config(&Config::default());
+    let mut config = ClientShellConfig::from_config(&Config::default());
+    // Measures sidebar rows without the herd banner above them.
+    config.animation = false;
     let mut state = ClientShellState::new(config);
     state.set_snapshot(Box::new(snapshot()));
     state.set_pane_surface(surface());

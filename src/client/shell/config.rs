@@ -124,6 +124,8 @@ impl ClientShellConfig {
             mobile_width_threshold: config.ui.mobile_width_threshold,
             tab_bar_position: config.ui.tab_bar_position,
             tab_bar_padding: config.ui.tab_bar_padding,
+            animation: config.ui.animation,
+            animation_frame_interval: config.ui.animation_frame_interval(),
             hide_tab_bar_when_single_tab: config.ui.hide_tab_bar_when_single_tab,
             spaces: config.ui.sidebar.spaces.clone(),
             agents: config.ui.sidebar.agents.clone(),
@@ -328,6 +330,8 @@ impl ClientShellConfig {
                 self.mobile_width_threshold = ui.mobile_width_threshold;
                 self.tab_bar_position = ui.tab_bar_position;
                 self.tab_bar_padding = ui.tab_bar_padding;
+                self.animation = ui.animation;
+                self.animation_frame_interval = ui.animation_frame_interval();
                 self.hide_tab_bar_when_single_tab = ui.hide_tab_bar_when_single_tab;
                 self.spaces = ui.sidebar.spaces.clone();
                 self.agents = ui.sidebar.agents.clone();

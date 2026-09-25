@@ -854,6 +854,8 @@ fn expanded_machine_sidebar_reveals_newly_focused_workspace() {
 #[test]
 fn expanded_machine_sidebar_applies_space_row_gap_within_each_machine() {
     let (mut state, remote_id) = state_with_remote();
+    // Measures sidebar rows without the herd banner above them.
+    state.config.animation = false;
     state.config.spaces.row_gap = 1;
 
     let add_second_workspace = |snapshot: &mut ClientShellSnapshot| {

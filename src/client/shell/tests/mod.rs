@@ -254,6 +254,7 @@ mod copy;
 mod endpoint_requests;
 mod endpoints;
 mod graphics;
+mod herd_banner;
 #[path = "input.rs"]
 mod input_domain;
 mod input_sync;
