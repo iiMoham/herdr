@@ -127,7 +127,7 @@ const DEFAULT_CONFIG: &str = r##"# momo configuration
 # so existing preview installs stay there until explicitly switched.
 # channel = "stable"
 
-# Check herdr.dev for new MoMo versions in the background.
+# Check MoMo's GitHub releases for new versions in the background.
 # version_check = true
 
 # Check herdr.dev for remote agent-detection manifest updates in the background.
@@ -725,7 +725,8 @@ fn main() -> io::Result<()> {
         println!("Config: {}", config::config_path().display());
         println!("Logs:   {}", logging::help_log_paths_summary());
         println!("Env:    HERDR_CONFIG_PATH overrides config file path");
-        println!("Home:   https://herdr.dev");
+        println!("Home:   {}", brand::REPOSITORY_URL);
+        println!("Based on herdr: https://herdr.dev");
         println!();
         println!("{}", cli::AGENT_HELP_FOOTER);
         return Ok(());

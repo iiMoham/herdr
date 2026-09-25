@@ -1,6 +1,6 @@
 //! Self-update mechanism.
 //!
-//! Checks the hosted herdr.dev update manifest for newer versions.
+//! Checks MoMo's release manifest (see `crate::brand::UPDATE_MANIFEST_URL`) for newer versions.
 //! Manual `herdr update` downloads and installs the binary.
 //! Background checks only surface availability and release notes.
 //! Uses `curl` as a subprocess for HTTP — no additional Rust HTTP dependencies.
@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use interprocess::local_socket::traits::Stream as _;
 use serde::{Deserialize, Deserializer};
 
-const STABLE_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/latest.json";
+const STABLE_UPDATE_MANIFEST_URL: &str = crate::brand::UPDATE_MANIFEST_URL;
 const PREVIEW_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/preview.json";
 const HOMEBREW_FORMULA_API_URL: &str = "https://formulae.brew.sh/api/formula/herdr.json";
 const HERDR_UPDATE_COMMAND: &str = "momo update";
@@ -209,6 +209,9 @@ struct UpdateManifest {
     announcement: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "deserialize_manifest_releases")]
     releases: BTreeMap<String, serde_json::Value>,
+    /// MoMo release number on top of `version` (`0.9.1-momo.N`).
+    #[serde(default)]
+    momo_release: Option<u32>,
 }
 
 fn deserialize_manifest_releases<'de, D>(
@@ -352,7 +355,7 @@ where
         .map_err(|e| format!("curl failed: {e}"))?;
 
     if !output.status.success() {
-        return Err("failed to fetch update manifest".into());
+        return Err(format!("failed to fetch update manifest from {url}"));
     }
 
     serde_json::from_slice(&output.stdout)
@@ -386,7 +389,12 @@ fn release_info_from_manifest(manifest: &UpdateManifest) -> Result<Option<Releas
     let latest = Version::parse(&manifest.version)
         .ok_or_else(|| format!("invalid version in update manifest: {}", manifest.version))?;
 
-    if !stable_channel_should_install(&latest, &current, crate::build_info::is_preview()) {
+    let latest_release = manifest.momo_release.unwrap_or(0);
+    if !stable_channel_should_install(
+        (&latest, latest_release),
+        (&current, crate::brand::release_number()),
+        crate::build_info::is_preview(),
+    ) {
         return Ok(None); // up to date
     }
 
@@ -414,7 +422,7 @@ fn release_info_from_manifest(manifest: &UpdateManifest) -> Result<Option<Releas
         })?;
 
     Ok(Some(ReleaseInfo {
-        identity: latest.to_string(),
+        identity: crate::brand::release_label(&latest.to_string(), latest_release),
         version: latest,
         channel: UpdateChannel::Stable,
         build_id: None,
@@ -431,9 +439,10 @@ fn release_info_from_manifest(manifest: &UpdateManifest) -> Result<Option<Releas
     }))
 }
 
+/// MoMo releases compare by (upstream base version, MoMo release number).
 fn stable_channel_should_install(
-    latest: &Version,
-    current: &Version,
+    latest: (&Version, u32),
+    current: (&Version, u32),
     installed_is_preview: bool,
 ) -> bool {
     installed_is_preview || latest > current
@@ -533,6 +542,9 @@ fn first_windows_stable_is_pending(
 fn check_latest() -> Result<Option<ReleaseInfo>, String> {
     let channel = UpdateChannel::configured();
     if channel == UpdateChannel::Preview {
+        if !crate::brand::HAS_PREVIEW_CHANNEL {
+            return Err(crate::brand::NO_PREVIEW_CHANNEL.into());
+        }
         return release_info_from_preview_manifest(&fetch_preview_manifest()?);
     }
 
@@ -1940,6 +1952,9 @@ fn is_mise_managed_install() -> bool {
 }
 
 pub(crate) fn preview_channel_rejection_for_current_install() -> Option<&'static str> {
+    if !crate::brand::HAS_PREVIEW_CHANNEL {
+        return Some(crate::brand::NO_PREVIEW_CHANNEL);
+    }
     let Ok(current_exe) = env::current_exe() else {
         return None;
     };
@@ -3589,6 +3604,53 @@ mod tests {
     }
 
     #[test]
+    fn momo_manifest_offers_a_newer_release_on_the_same_base_version() {
+        let (os, arch) = platform_target();
+        let asset_key = format!("{os}-{arch}");
+        let manifest_for = |momo_release: &str| {
+            let json = format!(
+                r####"{{
+                    "version": "{base}",
+                    {momo_release}
+                    "notes": "### Changed\n- MoMo release",
+                    "assets": {{
+                        "{asset_key}": {{
+                            "url": "https://github.com/iiMoham/momo/releases/download/momo-v{base}-momo.2/momo-{asset_key}",
+                            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        }}
+                    }}
+                }}"####,
+                base = crate::build_info::BASE_VERSION,
+            );
+            serde_json::from_str::<UpdateManifest>(&json).unwrap()
+        };
+
+        // Test builds are release 0, so MoMo release 2 on the same base is newer.
+        let release = release_info_from_manifest(&manifest_for(r#""momo_release": 2,"#))
+            .unwrap()
+            .expect("newer MoMo release");
+        assert_eq!(
+            release.label(),
+            format!("{}-momo.2", crate::build_info::BASE_VERSION)
+        );
+        assert!(release.download_url.contains("/momo-v"));
+
+        // Without a MoMo release number the same base version is not an update.
+        assert!(release_info_from_manifest(&manifest_for(""))
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn momo_rejects_the_preview_channel() {
+        assert_eq!(
+            preview_channel_rejection_for_current_install(),
+            Some(crate::brand::NO_PREVIEW_CHANNEL)
+        );
+        assert!(STABLE_UPDATE_MANIFEST_URL.starts_with("https://github.com/iiMoham/momo/"));
+    }
+
+    #[test]
     fn invalid_manifest_announcement_does_not_block_release_info() {
         let (os, arch) = platform_target();
         let asset_key = format!("{os}-{arch}");
@@ -3626,15 +3688,40 @@ mod tests {
         let latest_stable = Version::parse("0.6.6").unwrap();
         let installed_base = Version::parse("0.6.6").unwrap();
         assert!(stable_channel_should_install(
-            &latest_stable,
-            &installed_base,
+            (&latest_stable, 0),
+            (&installed_base, 0),
             true
         ));
         assert!(!stable_channel_should_install(
-            &latest_stable,
-            &installed_base,
+            (&latest_stable, 0),
+            (&installed_base, 0),
             false
         ));
+    }
+
+    #[test]
+    fn momo_releases_on_the_same_base_update_by_release_number() {
+        let base = Version::parse("0.9.1").unwrap();
+        let next_base = Version::parse("0.9.2").unwrap();
+        assert!(stable_channel_should_install((&base, 2), (&base, 1), false));
+        assert!(!stable_channel_should_install(
+            (&base, 1),
+            (&base, 1),
+            false
+        ));
+        assert!(!stable_channel_should_install(
+            (&base, 1),
+            (&base, 2),
+            false
+        ));
+        // A new upstream base always wins, even when its release counter restarts.
+        assert!(stable_channel_should_install(
+            (&next_base, 1),
+            (&base, 7),
+            false
+        ));
+        // Development builds (release 0) see every published release.
+        assert!(stable_channel_should_install((&base, 1), (&base, 0), false));
     }
 
     #[test]

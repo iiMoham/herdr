@@ -25,7 +25,6 @@ DEFAULT_PATHS = ["src", "tests"]
 # Files whose herdr strings are compatibility identifiers or are handled by
 # hand (update and remote install move to MoMo's own releases separately).
 SKIP_FILES = {
-    "src/remote/attach.rs",
     "src/build_info.rs",
     "src/brand.rs",
 }
